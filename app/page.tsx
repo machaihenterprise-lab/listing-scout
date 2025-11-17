@@ -1,65 +1,332 @@
-import Image from "next/image";
+'use client';
+
+import { useEffect, useState, FormEvent } from 'react';
+import { supabase } from '../lib/supabaseClient';
+
+type Lead = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  source: string | null;
+  status: string | null;
+};
+
 
 export default function Home() {
+  // Lead form state
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+
+  // Lead list + loading / message state
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loadingLeads, setLoadingLeads] = useState(true);
+
+  // Twilio test state
+  const [smsMessage, setSmsMessage] = useState<string | null>(null);
+  const [smsLoading, setSmsLoading] = useState(false);
+
+  // Fetch leads from Supabase
+  const fetchLeads = async () => {
+    setLoadingLeads(true);
+    const { data, error } = await supabase
+      .from('leads')
+      .select('id, name, phone, email, source, status')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error(error);
+      setMessage(`Error loading leads: ${error.message}`);
+    } else {
+      setLeads(data || []);
+    }
+    setLoadingLeads(false);
+  };
+
+  useEffect(() => {
+    fetchLeads();
+  }, []);
+
+  // Add a new lead + trigger Speed-to-Lead SMS
+  // Add a new lead + log message + trigger Speed-to-Lead SMS
+const addLead = async (e: FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
+  setMessage(null);
+
+  // 1) Insert lead into Supabase
+  const { data: leadRow, error: leadError } = await supabase
+    .from('leads')
+    .insert({
+      name,
+      phone,
+      email,
+      source: 'manual',
+    })
+    .select()
+    .single();
+
+  if (leadError) {
+    console.error(leadError);
+    setMessage(`Error: ${leadError.message}`);
+    setLoading(false);
+    return;
+  }
+
+  // 2) Insert initial message record
+  await supabase.from('messages').insert({
+    lead_id: leadRow.id,
+    direction: 'OUTBOUND',
+    channel: 'SMS',
+    body: `Hi ${name}, got your request. Are you still thinking about selling this year?`,
+  });
+
+  // 3) Trigger Speed-to-Lead SMS (best effort)
+  try {
+    await fetch('/api/speed-sms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone }),
+    });
+  } catch (err) {
+    console.error('SMS send failed:', err);
+  }
+
+  setMessage('✔️ Lead added and SMS triggered!');
+  setName('');
+  setPhone('');
+  setEmail('');
+  fetchLeads();
+  setLoading(false);
+};
+
+  // Send test SMS via API route
+  const sendTestSms = async () => {
+    setSmsLoading(true);
+    setSmsMessage(null);
+
+    try {
+      const res = await fetch('/api/test-sms', {
+        method: 'POST',
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSmsMessage(`Error: ${data.error || 'Failed to send SMS'}`);
+      } else {
+        setSmsMessage('✅ Test SMS sent to your phone!');
+      }
+    } catch (err: any) {
+      setSmsMessage(`Error: ${err.message || 'Failed to send SMS'}`);
+    }
+
+    setSmsLoading(false);
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <main
+      style={{
+        minHeight: '100vh',
+        maxWidth: '800px',
+        margin: '0 auto',
+        padding: '2rem 1rem',
+        fontFamily:
+          'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+      }}
+    >
+      <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>
+        Listing Scout — Leads (Dev)
+      </h1>
+
+      {/* Twilio test block */}
+      <div
+        style={{
+          marginBottom: '1.5rem',
+          padding: '1rem',
+          borderRadius: '0.75rem',
+          border: '1px solid #ddd',
+        }}
+      >
+              {/* HOT List */}
+      <section
+        style={{
+          padding: '1.5rem',
+          borderRadius: '1rem',
+          border: '1px solid #ddd',
+          marginBottom: '2rem',
+        }}
+      >
+        <h2 style={{ marginBottom: '0.75rem' }}>Leads to Call Now (HOT)</h2>
+        {leads.filter((l) => l.status === 'HOT').length === 0 ? (
+          <p>No HOT leads yet.</p>
+        ) : (
+          <ul
+            style={{
+              listStyle: 'none',
+              padding: 0,
+              margin: 0,
+            }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            {leads
+              .filter((l) => l.status === 'HOT')
+              .map((lead) => (
+                <li
+                  key={lead.id}
+                  style={{
+                    padding: '0.75rem 1rem',
+                    borderRadius: '0.75rem',
+                    border: '1px solid #eee',
+                    marginBottom: '0.5rem',
+                  }}
+                >
+                  <strong>{lead.name}</strong> — {lead.phone} — {lead.email}
+                </li>
+              ))}
+          </ul>
+        )}
+      </section>
+
+        <h2 style={{ marginBottom: '0.5rem' }}>Twilio Test</h2>
+        <button
+          onClick={sendTestSms}
+          disabled={smsLoading}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '999px',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '0.9rem',
+          }}
+        >
+          {smsLoading ? 'Sending…' : 'Send Test SMS'}
+        </button>
+        {smsMessage && (
+          <p style={{ marginTop: '0.5rem' }}>{smsMessage}</p>
+        )}
+      </div>
+
+      {/* Add Lead form */}
+      <section
+        style={{
+          padding: '1.5rem',
+          borderRadius: '1rem',
+          border: '1px solid #ddd',
+          marginBottom: '2rem',
+        }}
+      >
+        <h2 style={{ marginBottom: '0.75rem' }}>Add Lead</h2>
+        <form
+          onSubmit={addLead}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.75rem',
+          }}
+        >
+          <input
+            type="text"
+            placeholder="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            style={{
+              padding: '0.5rem',
+              borderRadius: '0.5rem',
+              border: '1px solid #ccc',
+            }}
+          />
+          <input
+            type="tel"
+            placeholder="Phone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            required
+            style={{
+              padding: '0.5rem',
+              borderRadius: '0.5rem',
+              border: '1px solid #ccc',
+            }}
+          />
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            style={{
+              padding: '0.5rem',
+              borderRadius: '0.5rem',
+              border: '1px solid #ccc',
+            }}
+          />
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              marginTop: '0.5rem',
+              padding: '0.75rem 1.5rem',
+              borderRadius: '999px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '1rem',
+            }}
           >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            {loading ? 'Saving…' : 'Add Lead'}
+          </button>
+        </form>
+
+        {message && (
+          <p style={{ marginTop: '0.75rem' }}>{message}</p>
+        )}
+      </section>
+
+      {/* Leads list */}
+      <section>
+        <h2 style={{ marginBottom: '0.75rem' }}>Leads</h2>
+        {loadingLeads ? (
+          <p>Loading leads…</p>
+        ) : leads.length === 0 ? (
+          <p>No leads yet.</p>
+        ) : (
+          <ul
+            style={{
+              listStyle: 'none',
+              padding: 0,
+              margin: 0,
+            }}
+          >
+            {leads.map((lead) => (
+              <li
+                key={lead.id}
+                style={{
+                  padding: '0.75rem 1rem',
+                  borderRadius: '0.75rem',
+                  border: '1px solid #eee',
+                  marginBottom: '0.5rem',
+                }}
+              >
+                <strong>{lead.name}</strong> — {lead.phone} —{' '}
+                {lead.email}
+                {lead.source && (
+                  <span
+                    style={{
+                      opacity: 0.6,
+                      marginLeft: '0.5rem',
+                    }}
+                  >
+                    ({lead.source})
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </main>
   );
 }
