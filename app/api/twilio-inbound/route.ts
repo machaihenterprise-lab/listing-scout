@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '../../../../lib/supabaseClient';
+import { supabase } from '../../../lib/supabaseClient';
 
 // Twilio will POST inbound SMS as x-www-form-urlencoded
 export async function POST(request: Request) {
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
       if (match) {
         // @ts-ignore – Supabase types are loose here
-        leadId = match.id;
+        leadId = (match as any).id;
       }
     }
 
