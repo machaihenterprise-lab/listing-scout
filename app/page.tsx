@@ -139,7 +139,7 @@ const addLead = async (e: FormEvent) => {
       }}
     >
       <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>
-        Listing Scout — Leads (Dev)
+        Listing Scout — Leads (Live)
       </h1>
 
       {/* Twilio test block */}
