@@ -1,28 +1,26 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '../../../lib/supabaseClient';
 
-// Twilio will POST inbound SMS data as form-encoded.
-// We'll:
-// 1) read From + Body
-// 2) find the lead with matching phone
-// 3) insert INBOUND/SMS message row
-
+// Twilio posts application/x-www-form-urlencoded.
+// We'll parse it manually using URLSearchParams.
 export async function POST(req: Request) {
   try {
-    const formData = await req.formData();
+    const rawBody = await req.text();
+    const params = new URLSearchParams(rawBody);
 
-    const from = String(formData.get('From') || '').trim();
-    const body = String(formData.get('Body') || '').trim();
+    const from = (params.get('From') || '').trim();
+    const body = (params.get('Body') || '').trim();
 
     if (!from || !body) {
-      return NextResponse.json(
-        { error: 'Missing From or Body' },
-        { status: 400 }
-      );
+      console.error('Missing From or Body in Twilio webhook', { from, body });
+      // Still return 200 so Twilio doesn't keep retrying
+      return new NextResponse('<Response></Response>', {
+        status: 200,
+        headers: { 'Content-Type': 'text/xml' },
+      });
     }
 
-    // Normalize phone: Twilio sends in E.164 like +15555550123
-    const fromNumber = from;
+    const fromNumber = from; // e.g. +14342095253
 
     // Find lead with this phone
     const { data: lead, error: leadError } = await supabase
@@ -33,16 +31,20 @@ export async function POST(req: Request) {
 
     if (leadError) {
       console.error('Lead lookup error:', leadError.message);
-      // We still return 200 so Twilio doesn't retry forever
-      return NextResponse.json({ ok: true });
+      return new NextResponse('<Response></Response>', {
+        status: 200,
+        headers: { 'Content-Type': 'text/xml' },
+      });
     }
 
     if (!lead) {
       console.warn('No lead found for inbound SMS from:', fromNumber);
-      return NextResponse.json({ ok: true });
+      return new NextResponse('<Response></Response>', {
+        status: 200,
+        headers: { 'Content-Type': 'text/xml' },
+      });
     }
 
-    // Insert INBOUND message row
     const { error: msgError } = await supabase.from('messages').insert({
       lead_id: lead.id,
       direction: 'INBOUND',
@@ -54,10 +56,16 @@ export async function POST(req: Request) {
       console.error('Failed to insert inbound message:', msgError.message);
     }
 
-    // Twilio just needs a 200 response; content can be empty or simple text.
-    return new NextResponse('OK', { status: 200 });
+    // Respond with empty TwiML so Twilio is happy
+    return new NextResponse('<Response></Response>', {
+      status: 200,
+      headers: { 'Content-Type': 'text/xml' },
+    });
   } catch (err: any) {
-    console.error('Twilio inbound handler error:', err?.message || err);
-    return new NextResponse('Error', { status: 200 }); // still 200 for Twilio
+    console.error('Twilio inbound handler crashed', err);
+    return new NextResponse('<Response></Response>', {
+      status: 200,
+      headers: { 'Content-Type': 'text/xml' },
+    });
   }
 }
