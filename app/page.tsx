@@ -23,6 +23,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
 
   // Twilio test state
@@ -42,6 +43,7 @@ export default function Home() {
       setMessage(`Error loading leads: ${error.message}`);
     } else {
       setLeads(data || []);
+       if (!selectedLead && data && data.length > 0) {
     }
     setLoadingLeads(false);
   };
@@ -152,56 +154,51 @@ const addLead = async (e: FormEvent) => {
         }}
       >
               {/* HOT List */}
-      <section
-        style={{
-          padding: '1.5rem',
-          borderRadius: '1rem',
-          border: '1px solid #ddd',
-          marginBottom: '2rem',
-        }}
-      >
-        <h2 style={{ marginBottom: '0.75rem' }}>Leads to Call Now (HOT)</h2>
-        {leads.filter((l) => l.status === 'HOT').length === 0 ? (
-          <p>No HOT leads yet.</p>
-        ) : (
-          <ul
+     <section
+  style={{
+    padding: '1.5rem',
+    borderRadius: '1rem',
+    border: '1px solid #ddd',
+    marginBottom: '2rem',
+  }}
+>
+  <h2 style={{ marginBottom: '0.75rem' }}>Leads to Call Now (HOT)</h2>
+
+  {loadingLeads ? (
+    <p>Loading leads...</p>
+  ) : leads.length === 0 ? (
+    <p>No HOT leads yet.</p>
+  ) : (
+    <ul
+      style={{
+        listStyle: 'none',
+        padding: 0,
+        margin: 0,
+      }}
+    >
+      {leads
+        .filter((l) => l.status === 'HOT')
+        .map((lead) => (
+          <li
+            key={lead.id}
+            onClick={() => {
+              setSelectedLead(lead);
+              setMessage(null);
+            }}
             style={{
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
+              padding: '0.75rem 1rem',
+              borderRadius: '0.75rem',
+              border: '1px solid #eee',
+              marginBottom: '0.5rem',
+              cursor: 'pointer',
             }}
           >
-            {leads
-              .filter((l) => l.status === 'HOT')
-              .map((lead) => (
-                <li
-                  key={lead.id}
-                  style={{
-                    padding: '0.75rem 1rem',
-                    borderRadius: '0.75rem',
-                    border: '1px solid #eee',
-                    marginBottom: '0.5rem',
-                  }}
-                >
-                  <strong>{lead.name}</strong> — {lead.phone} — {lead.email}
-                </li>
-              ))}
-          </ul>
-        )}
-      </section>
-
-        <h2 style={{ marginBottom: '0.5rem' }}>Twilio Test</h2>
-        <button
-          onClick={sendTestSms}
-          disabled={smsLoading}
-          style={{
-            padding: '0.5rem 1rem',
-            borderRadius: '999px',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '0.9rem',
-          }}
-        >
+            <strong>{lead.name}</strong> — {lead.phone}
+          </li>
+        ))}
+    </ul>
+  )}
+</section>
           {smsLoading ? 'Sending…' : 'Send Test SMS'}
         </button>
         {smsMessage && (
