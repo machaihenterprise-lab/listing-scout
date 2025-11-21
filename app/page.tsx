@@ -182,14 +182,16 @@ export default function Home() {
     setMessage(null);
 
     try {
-     const { error } = await supabase.from("leads").insert([
-  {
-    name,
-    phone,
-    email,
-    nurture_status: "ACTIVE",
-  },
-]);
+   const { error } = await supabase.from("leads").insert({
+   name,
+   phone,
+   email,
+   source: "manual",                     // keep your existing value if different
+   status: "NURTURE",                        // this form is for HOT leads
+   nurture_status: "ACTIVE",             // included in edge-function filter
+   nurture_stage: "DAY_1",               // start at day 1
+   next_nurture_at: new Date().toISOString(), // schedule first nurture SMS
+});
 
       if (error) {
         throw error;
