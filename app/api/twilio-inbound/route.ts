@@ -2,7 +2,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 import { analyzeIntent } from "@/lib/analyzeIntent";
-import { normalizePhone } from "@/lib/phone";
 
 // ENV
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID!;
@@ -11,6 +10,26 @@ const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER!;
 const AGENT_ALERT_NUMBER = process.env.AGENT_ALERT_NUMBER || "";
 
 // --- helpers ---
+
+function normalizePhone(phone: string): string {
+  if (!phone) return "";
+
+  // Strip everything that isn't a digit
+  const digits = phone.replace(/\D/g, "");
+
+  // Simple North America logic: if 10 digits, assume +1
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+
+  // If already starts with country code (like 11 digits starting with 1)
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+${digits}`;
+  }
+
+  // Fallback: just prefix + and hope it's already correct length
+  return `+${digits}`;
+}
 
 function xmlOk(): NextResponse {
   const xml = `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
