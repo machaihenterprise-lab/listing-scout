@@ -128,11 +128,9 @@ export async function POST(request: Request) {
     }
 
     // ---- HOT INTENTS ----
-    const isHot =
-      intent === "HOT_APPOINTMENT" ||
-      intent === "HOT_VALUATION" ||
-      intent === "HOT_CALL_REQUEST" ||
-      intent === "HOT_GENERAL";
+    // TEMP FORCE HOT FOR TESTING
+   const isHot = true;
+   console.log("TEMP_FORCE_HOT", { body, intent });
 
     if (isHot && lead) {
       // Pause nurture for this lead (lock for 7 days)
