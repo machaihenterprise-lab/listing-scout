@@ -83,13 +83,14 @@ export async function POST(request: Request) {
     const lead = leads?.[0] ?? null;
 
     // Log inbound message
-    const { error: msgError } = await supabase.from("messages").insert({
-      lead_id: lead?.id ?? null,
-      body,
-      direction: "INBOUND",
-      is_auto: false,
-      created_at: createdAt,
-    });
+   const { error: msgError } = await supabase.from("messages").insert({
+   lead_id: lead?.id ?? null,
+   body,
+   direction: "INBOUND",
+   is_auto: false,
+   channel: "SMS",      
+   created_at: createdAt,
+ });
 
     if (msgError) {
       console.error("Error inserting inbound message:", msgError);
