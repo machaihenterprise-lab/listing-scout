@@ -82,6 +82,13 @@ export async function POST(request: Request) {
 
     const lead = leads?.[0] ?? null;
 
+    console.log("DEBUG_LEAD_MATCH", {
+   rawFrom: from,
+   fromNormalized,
+   leadsFound: leads?.map(l => l.phone),
+   matchedLead: lead,
+  });
+
     // Log inbound message
    const { error: msgError } = await supabase.from("messages").insert({
    lead_id: lead?.id ?? null,
