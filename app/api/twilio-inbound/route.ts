@@ -122,16 +122,16 @@ export async function POST(request: Request) {
     }
 
     // ---- NURTURE ONLY / UNKNOWN ----
-    if (intent === "NURTURE_ONLY" || intent === "UNKNOWN") {
-      // We keep them in the nurture cycle, no status change.
-      return xmlOk();
-    }
+    console.log("INBOUND_INTENT", intent);
+   // TEMP: do NOT early-return for nurture/unknown while debugging
+   // if (intent === "NURTURE_ONLY" || intent === "UNKNOWN") {
+   //   return xmlOk();
+   // }
 
     // ---- HOT INTENTS ----
-    // TEMP FORCE HOT FOR TESTING
+   // TEMP: force every inbound reply to be treated as HOT
    const isHot = true;
    console.log("TEMP_FORCE_HOT", { body, intent });
-
     if (isHot && lead) {
       // Pause nurture for this lead (lock for 7 days)
       const lockUntil = new Date(
