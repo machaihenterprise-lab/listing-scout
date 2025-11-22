@@ -1,33 +1,32 @@
+// app/api/twilio-inbound/route.ts
 import { NextResponse } from "next/server";
-import { supabase } from "../../../lib/supabaseClient";
-import { analyzeIntent, type IntentResult } from "../../../lib/analyzeIntent";
+import { supabase } from "@/lib/supabaseClient";
+import { analyzeIntent } from "@/lib/analyzeIntent";
+import { normalizePhone } from "@/lib/phone";
 
+// ENV
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID!;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN!;
 const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER!;
-const AGENT_ALERT_NUMBER = process.env.AGENT_ALERT_NUMBER; // <-- set this in your .env
+const AGENT_ALERT_NUMBER = process.env.AGENT_ALERT_NUMBER || "";
 
-// Simple TwiML 200 OK back to Twilio
-function xmlOk() {
-  const xml = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
+// --- helpers ---
+
+function xmlOk(): NextResponse {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
   return new NextResponse(xml, {
     status: 200,
     headers: { "Content-Type": "text/xml" },
   });
 }
 
-function normalizePhone(phone: string): string {
-  return phone.replace(/\D/g, "");
-}
-
 async function sendTwilioSms(to: string, body: string) {
   if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE_NUMBER) {
-    console.error("Twilio env vars missing");
+    console.error("Twilio env vars missing, cannot send SMS");
     return;
   }
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
-
   const params = new URLSearchParams({
     From: TWILIO_PHONE_NUMBER,
     To: to,
@@ -35,7 +34,7 @@ async function sendTwilioSms(to: string, body: string) {
   });
 
   const auth = Buffer.from(
-    `${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`,
+    `${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`
   ).toString("base64");
 
   const res = await fetch(url, {
@@ -49,143 +48,105 @@ async function sendTwilioSms(to: string, body: string) {
 
   if (!res.ok) {
     const text = await res.text();
-    console.error("Twilio send error", res.status, text);
+    console.error("Error sending Twilio SMS", res.status, text);
   }
 }
 
-export async function POST(request: Request) {
-  try {
-    const rawBody = await request.text();
-    const params = new URLSearchParams(rawBody);
+// --- main handler ---
 
-    const from = params.get("From") || "";
-    const body = params.get("Body") || "";
+export async function POST(req: Request) {
+  // Twilio sends x-www-form-urlencoded
+  const params = await req.formData();
+  const from = (params.get("From") || "").toString();
+  const body = (params.get("Body") || "").toString();
 
-    if (!from || !body) {
-      console.error("Twilio inbound missing From or Body", { from, body });
-      return xmlOk();
-    }
-
-    const fromNormalized = normalizePhone(from);
-    const createdAt = new Date().toISOString();
-
-    // Lookup lead by phone
-    const { data: leads, error: leadError } = await supabase
-      .from("leads")
-      .select("*")
-      .eq("phone", fromNormalized)
-      .limit(1);
-
-    if (leadError) {
-      console.error("Error looking up lead for inbound SMS:", leadError);
-    }
-
-    const lead = leads?.[0] ?? null;
-
-    console.log("DEBUG_LEAD_MATCH", {
-   rawFrom: from,
-   fromNormalized,
-   leadsFound: leads?.map(l => l.phone),
-   matchedLead: lead,
-  });
-
-    // Log inbound message
-   const { error: msgError } = await supabase.from("messages").insert({
-   lead_id: lead?.id ?? null,
-   body,
-   direction: "INBOUND",
-   is_auto: false,
-   channel: "SMS",      
-   created_at: createdAt,
- });
-
-    if (msgError) {
-      console.error("Error inserting inbound message:", msgError);
-    }
-
-    // Run intent analysis
-    const intent: IntentResult = analyzeIntent(body);
-    console.log("Inbound intent", { from, intent });
-
-    // ---- STOP / UNSUBSCRIBE ----
-    if (intent === "STOP") {
-      if (lead) {
-        const lockUntil = new Date("2099-01-01T00:00:00.000Z").toISOString();
-        const { error: updateError } = await supabase
-          .from("leads")
-          .update({
-            status: "UNSUBSCRIBED",
-            nurture_status: "PAUSED",
-            nurture_locked_until: lockUntil,
-          })
-          .eq("id", lead.id);
-
-        if (updateError) {
-          console.error("Error updating lead to UNSUBSCRIBED:", updateError);
-        }
-      }
-
-      return xmlOk();
-    }
-
-    // ---- NURTURE ONLY / UNKNOWN ----
-    console.log("INBOUND_INTENT", intent);
-   // TEMP: do NOT early-return for nurture/unknown while debugging
-   // if (intent === "NURTURE_ONLY" || intent === "UNKNOWN") {
-   //   return xmlOk();
-   // }
-
-    // ---- HOT INTENTS ----
-   // TEMP: force every inbound reply to be treated as HOT
-   const isHot = true;
-   console.log("TEMP_FORCE_HOT", { body, intent });
-    if (isHot && lead) {
-      // Pause nurture for this lead (lock for 7 days)
-      const lockUntil = new Date(
-        Date.now() + 7 * 24 * 60 * 60 * 1000,
-      ).toISOString();
-
-      const { error: updateError } = await supabase
-        .from("leads")
-        .update({
-          status: "HOT",
-          nurture_status: "PAUSED",
-          nurture_locked_until: lockUntil,
-        })
-        .eq("id", lead.id);
-
-      if (updateError) {
-        console.error("Error updating lead to HOT:", updateError);
-      }
-
-      // Send agent alert SMS
-      if (AGENT_ALERT_NUMBER) {
-        const name = (lead as any).name || "New Lead";
-        const address =
-          (lead as any).property_address ||
-          (lead as any).address ||
-          "Unknown";
-        const snippet =
-          body.length > 120 ? body.slice(0, 117).trimEnd() + "..." : body;
-
-        const alertBody =
-          `🔥 HOT LEAD: ${name} ` +
-          `🏠 Prop: ${address} ` +
-          `💬 Said: "${snippet}"\n` +
-          `👇 Tap to Call: ${from}`;
-
-        await sendTwilioSms(AGENT_ALERT_NUMBER, alertBody);
-      } else {
-        console.warn(
-          "AGENT_ALERT_NUMBER not set; skipping agent HOT alert SMS.",
-        );
-      }
-    }
-
-    return xmlOk();
-  } catch (err) {
-    console.error("Error handling Twilio inbound webhook:", err);
-    // Still return 200 so Twilio doesn't retry aggressively
+  if (!from || !body) {
+    console.error("Twilio inbound missing From or Body", { from, body });
     return xmlOk();
   }
+
+  const fromNormalized = normalizePhone(from);
+  const createdAt = new Date().toISOString();
+
+  // 1) Lookup lead by phone
+  const { data: leads, error: leadError } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("phone", fromNormalized)
+    .limit(1);
+
+  if (leadError) {
+    console.error("Error looking up lead for inbound SMS", leadError);
+  }
+
+  const lead = leads?.[0] ?? null;
+
+  // 2) Log inbound message (even if we don't find a lead)
+  const { error: msgError } = await supabase.from("messages").insert({
+    lead_id: lead?.id ?? null,
+    body,
+    direction: "INBOUND",
+    channel: "SMS",
+    created_at: createdAt,
+    is_auto: false,
+  });
+
+  if (msgError) {
+    console.error("Error logging inbound message", msgError);
+  }
+
+  // 3) Classify intent
+  const intent = await analyzeIntent(body);
+  console.log("INBOUND_INTENT", { from: fromNormalized, intent });
+
+  // --- NURTURE ONLY / UNKNOWN ---
+  if (intent === "NURTURE_ONLY" || intent === "UNKNOWN") {
+    // No status change; they stay in nurture
+    return xmlOk();
+  }
+
+  // --- HOT INTENTS ---
+  const isHot =
+    intent === "HOT_APPOINTMENT" ||
+    intent === "HOT_VALUATION" ||
+    intent === "HOT_CALL_REQUEST" ||
+    intent === "HOT_GENERAL";
+
+  if (isHot && lead) {
+    const lockUntil = new Date(
+      Date.now() + 7 * 24 * 60 * 60 * 1000 // 7 days
+    ).toISOString();
+
+    const { error: updateError } = await supabase
+      .from("leads")
+      .update({
+        status: "HOT",
+        nurture_status: "PAUSED",
+        nurture_locked_until: lockUntil,
+      })
+      .eq("id", lead.id);
+
+    if (updateError) {
+      console.error("Error updating lead to HOT", updateError);
+    } else {
+      console.log("Lead marked HOT", {
+        leadId: lead.id,
+        phone: lead.phone,
+        intent,
+      });
+    }
+
+    // Agent alert SMS
+    if (AGENT_ALERT_NUMBER) {
+      const alertBody = `HOT LEAD: ${
+        lead.name || lead.phone
+      } replied:\n"${body}"`;
+      await sendTwilioSms(AGENT_ALERT_NUMBER, alertBody);
+    } else {
+      console.warn("AGENT_ALERT_NUMBER not set; skipping hot alert SMS");
+    }
+  }
+
+  // Nothing else to say back to the lead via TwiML
+  return xmlOk();
 }
