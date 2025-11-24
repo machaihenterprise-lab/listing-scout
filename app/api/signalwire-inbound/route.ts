@@ -8,6 +8,7 @@ const AGENT_ALERT_NUMBER = process.env.AGENT_ALERT_NUMBER || "";
 const SIGNALWIRE_SPACE_URL = process.env.SIGNALWIRE_SPACE_URL || ""; // e.g. "example.signalwire.com"
 const SIGNALWIRE_PROJECT_ID = process.env.SIGNALWIRE_PROJECT_ID || "";
 const SIGNALWIRE_API_TOKEN = process.env.SIGNALWIRE_API_TOKEN || "";
+const FROM_NUMBER = process.env.SIGNALWIRE_FROM_NUMBER || "";
 
 // --- helpers ---
 
@@ -31,52 +32,29 @@ function xmlOk(): NextResponse {
 }
 
 async function sendAgentAlertSms(to: string, body: string) {
-  if (!SIGNALWIRE_SPACE_URL || !SIGNALWIRE_PROJECT_ID || !SIGNALWIRE_API_TOKEN) {
-    console.error("SignalWire env vars missing, cannot send agent SMS");
-    return;
-  }
-
-  const url = `https://${SIGNALWIRE_SPACE_URL}/api/laml/2010-04-01/Accounts/${SIGNALWIRE_PROJECT_ID}/Messages.json`;
-
-  const FROM_NUMBER = process.env.SIGNALWIRE_FROM_NUMBER || "";
-
-async function sendAgentAlertSms(to: string, body: string) {
   if (
     !SIGNALWIRE_SPACE_URL ||
     !SIGNALWIRE_PROJECT_ID ||
     !SIGNALWIRE_API_TOKEN ||
     !FROM_NUMBER
   ) {
-    console.error("SignalWire env vars missing, cannot send agent SMS");
+    console.error("SignalWire env vars missing, cannot send agent SMS", {
+      SIGNALWIRE_SPACE_URL,
+      SIGNALWIRE_PROJECT_ID,
+      hasToken: !!SIGNALWIRE_API_TOKEN,
+      FROM_NUMBER,
+    });
     return;
   }
 
   const url = `https://${SIGNALWIRE_SPACE_URL}/api/laml/2010-04-01/Accounts/${SIGNALWIRE_PROJECT_ID}/Messages.json`;
 
+  // 👇 THIS is the params the error was complaining about
   const params = new URLSearchParams({
     From: FROM_NUMBER,
     To: to,
     Body: body,
   });
-
-  const auth = Buffer.from(
-    `${SIGNALWIRE_PROJECT_ID}:${SIGNALWIRE_API_TOKEN}`
-  ).toString("base64");
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: params.toString(),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    console.error("Error sending SignalWire SMS", res.status, text);
-  }
-}
 
   const auth = Buffer.from(
     `${SIGNALWIRE_PROJECT_ID}:${SIGNALWIRE_API_TOKEN}`
