@@ -381,7 +381,9 @@ export default function Home() {
                      border: isSelected ? "1px solid #fbbf24" : "1px solid #374151",
                      backgroundColor: isSelected ? "rgba(251,191,36,0.08)" : "transparent",
                    }}
-               >
+                     className="transition-colors transition-shadow duration-150 shadow-sm hover:shadow-md hover:bg-slate-800/40"
+
+                 >
                    <div
                      style={{
                      display: "flex",
