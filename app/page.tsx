@@ -306,15 +306,8 @@ export default function Home() {
         Listing Scout — Leads (Live)
       </h1>
 
-      <div
-       style={{
-       display: "flex",
-       flexDirection: "column",
-       gap: "1.5rem",
-     }}
-    className="lg:flex-row"
-   >
-
+      <div className="flex flex-col gap-6 items-stretch lg:flex-row lg:items-start">
+        
         {/* LEFT COLUMN */}
         <div
           style={{
