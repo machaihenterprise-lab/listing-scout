@@ -381,19 +381,26 @@ export default function Home() {
                      border: isSelected ? "1px solid #fbbf24" : "1px solid #374151",
                      backgroundColor: isSelected ? "rgba(251,191,36,0.08)" : "transparent",
                    }}
-              >
+               >
                    <div
                      style={{
                      display: "flex",
                      justifyContent: "space-between",
                      alignItems: "center",
-                 }}
-              >
-                   <div>
-                     <strong>{lead.name || "Unnamed lead"}</strong> — {lead.phone}
-                    </div>
+                     width: "100%",
+                   }}
+                 >
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                     <strong>{lead.name || "Unnamed lead"}</strong>
+                     <span style={{ fontSize: "0.85rem", opacity: 0.9 }}>📞 {lead.phone}</span>
+                     {lead.email && (
+                       <span style={{ fontSize: "0.85rem", opacity: 0.9 }}>📧 {lead.email}</span>
+                     )}
+                   </div>
+
                    <StatusPill status={lead.status} />
                   </div>
+
                </li>
           );
        })}
