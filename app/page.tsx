@@ -30,6 +30,35 @@ type MessageRow = {
   created_at: string;
 };
 
+function StatusPill({ status }: { status?: string | null }) {
+  const normalized = (status || "").toUpperCase();
+
+  const base =
+    "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium";
+
+  if (normalized === "HOT") {
+    return (
+      <span className={`${base} bg-red-500/15 text-red-400 border border-red-500/30`}>
+        🔥 HOT
+      </span>
+    );
+  }
+
+  if (normalized === "NURTURE") {
+    return (
+      <span className={`${base} bg-emerald-500/10 text-emerald-300 border border-emerald-500/20`}>
+        🌱 Nurture
+      </span>
+    );
+  }
+
+  return (
+    <span className={`${base} bg-slate-500/10 text-slate-300 border border-slate-500/20`}>
+      {normalized || "UNKNOWN"}
+    </span>
+  );
+}
+
 export default function Home() {
   // Lead form state
   const [name, setName] = useState('');
@@ -464,10 +493,10 @@ export default function Home() {
       <p style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
         ✉️ {selectedLead.email}
       </p>
-      <p style={{ marginBottom: '0.75rem', fontSize: '0.85rem' }}>
-        Status:{' '}
-        <strong>{selectedLead.status || 'UNKNOWN'}</strong>
-      </p>
+     <div style={{ marginBottom: '0.75rem', fontSize: '0.9rem' }}>
+     <span style={{ color: '#aaa', marginRight: '0.35rem' }}>Status:</span>
+     <StatusPill status={selectedLead?.status} />
+     </div>
 
       {/* Messages list */}
       <div
