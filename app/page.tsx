@@ -307,12 +307,14 @@ export default function Home() {
       </h1>
 
       <div
-        style={{
-          display: 'flex',
-          gap: '1.5rem',
-          alignItems: 'flex-start',
-        }}
-      >
+       style={{
+       display: "flex",
+       flexDirection: "column",
+       gap: "1.5rem",
+     }}
+    className="lg:flex-row"
+   >
+
         {/* LEFT COLUMN */}
         <div
           style={{
