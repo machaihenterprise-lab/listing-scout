@@ -370,22 +370,39 @@ export default function Home() {
                 }}
               >
                 {leads
-                  .filter((l) => l.status === 'HOT')
-                  .map((lead) => (
-                    <li
-                      key={lead.id}
-                      onClick={() => handleSelectLead(lead)}
-                      style={{
-                        padding: '0.75rem 1rem',
-                        borderRadius: '0.75rem',
-                        border: '1px solid #374151',
-                        marginBottom: '0.5rem',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <strong>{lead.name}</strong> — {lead.phone}
-                    </li>
-                  ))}
+                  .filter((l) => l.status === "HOT")
+                  .map((lead) => {
+                  const isSelected = selectedLead && selectedLead.id === lead.id;
+
+                 return (
+                   <li
+                     key={lead.id}
+                     onClick={() => handleSelectLead(lead)}
+                     style={{
+                     padding: "0.75rem 1rem",
+                     borderRadius: "0.75rem",
+                     marginBottom: "0.5rem",
+                     cursor: "pointer",
+                     border: isSelected ? "1px solid #fbbf24" : "1px solid #374151",
+                     backgroundColor: isSelected ? "rgba(251,191,36,0.08)" : "transparent",
+                   }}
+              >
+                   <div
+                     style={{
+                     display: "flex",
+                     justifyContent: "space-between",
+                     alignItems: "center",
+                 }}
+              >
+                   <div>
+                     <strong>{lead.name || "Unnamed lead"}</strong> — {lead.phone}
+                    </div>
+                   <StatusPill status={lead.status} />
+                  </div>
+               </li>
+          );
+       })}
+
               </ul>
             )}
           </section>
