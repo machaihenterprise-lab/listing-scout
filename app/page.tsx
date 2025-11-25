@@ -18,6 +18,7 @@ type Lead = {
   last_nurture_sent_at?: string | null;
   last_agent_sent_at?: string | null;
   nurture_locked_until?: string | null;
+  lastContactedAt?: string | null; // ISO timestamp or null
 };
 
 
@@ -153,14 +154,37 @@ export default function Home() {
     }
 
     console.log('Loaded leads:', data);
-    const leadsData = (data || []) as Lead[];
+    if (!data) {
+  setLeads([]);
+  return;
+}
 
-    setLeads(leadsData);
+const mappedLeads: Lead[] = data.map((row: any) => ({
+  id: row.id,
+  name: row.name,
+  phone: row.phone,
+  email: row.email,
+  source: row.source,
+  status: row.status,
+
+  nurture_status: row.nurture_status,
+  nurture_stage: row.nurture_stage,
+  next_nurture_at: row.next_nurture_at,
+  last_nurture_sent_at: row.last_nurture_sent_at,
+  last_agent_sent_at: row.last_agent_sent_at,
+  nurture_locked_until: row.nurture_locked_until,
+
+  // 👇 new field we introduced
+  lastContactedAt: row.last_contacted_at ?? null,
+}));
+
+setLeads(mappedLeads);
 
     // Auto-select first HOT lead if none selected yet
-    if (!selectedLead && leadsData.length > 0) {
-      setSelectedLead(leadsData[0]);
-    }
+if (!selectedLead && mappedLeads.length > 0) {
+  setSelectedLead(mappedLeads[0]);
+}
+
   } catch (err: any) {
     console.error('Error loading leads:', err);
     setMessage(`Error loading leads: ${err.message || 'Unknown error'}`);
