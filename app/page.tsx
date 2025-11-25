@@ -552,6 +552,19 @@ if (!selectedLead && mappedLeads.length > 0) {
               {lead.email && (
                 <div style={{ fontSize: "0.8rem", opacity: 0.8 }}>
                   {lead.email}
+                  <p
+                    style={{
+                    fontSize: '0.75rem',
+                    color: '#9ca3af',
+                    marginTop: '0.25rem',
+                  }}
+                 >
+                   Last contacted:{' '}
+                   {lead.lastContactedAt
+                     ? new Date(lead.lastContactedAt).toLocaleDateString()
+                     : 'Never'}
+                 </p>
+
                 </div>
               )}
             </div>
