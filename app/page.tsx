@@ -374,14 +374,21 @@ export default function Home() {
                      key={lead.id}
                      onClick={() => handleSelectLead(lead)}
                      style={{
-                     padding: "0.75rem 1rem",
-                     borderRadius: "0.75rem",
-                     marginBottom: "0.5rem",
-                     cursor: "pointer",
-                     border: isSelected ? "1px solid #fbbf24" : "1px solid #374151",
-                     backgroundColor: isSelected ? "rgba(251,191,36,0.08)" : "transparent",
-                   }}
-                     className="transition-colors transition-shadow duration-150 shadow-sm hover:shadow-md hover:bg-slate-800/40"
+                      padding: "0.9rem 1rem",
+                      borderRadius: "0.9rem",
+                      marginBottom: "0.75rem",
+                      cursor: "pointer",
+                      border: isSelected ? "1px solid #fbbf24" : "1px solid #1f2937",
+                      background:
+                       isSelected
+                         ? "radial-gradient(circle at top left, rgba(251,191,36,0.18), #020617)"
+                         : "#020617",
+                      boxShadow: isSelected
+                        ? "0 12px 24px rgba(0,0,0,0.7)"
+                        : "0 8px 18px rgba(0,0,0,0.55)",
+                      transition: "background 150ms ease, box-shadow 150ms ease, transform 120ms ease",
+                    }}
+                     className="hover:-translate-y-[1px] hover:shadow-lg"
 
                  >
                    <div
