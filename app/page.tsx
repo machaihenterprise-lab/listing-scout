@@ -823,12 +823,13 @@ export default function Home() {
       >
         Replies here send an SMS to this lead and are logged in the conversation
         above.
-      </p>
-    </div>
-  )}
-</aside>
+          </p>
+    </aside>
       </div>
-        </main>
+    </main>
   </>
 );
-}
+} 
+
+     
+    
