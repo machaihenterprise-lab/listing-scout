@@ -665,19 +665,20 @@ export default function Home() {
   <div></div>
 )}
       {/* Lead header */}
-      <p style={{ marginBottom: '0.25rem' }}>
-        <strong>{selectedLead.name}</strong>
-      </p>
-      <p style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
-        📞 {selectedLead.phone}
-      </p>
-      <p style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
-        ✉️ {selectedLead.email}
-      </p>
-     <div style={{ marginBottom: '0.75rem', fontSize: '0.9rem' }}>
-     <span style={{ color: '#aaa', marginRight: '0.35rem' }}>Status:</span>
-     <StatusPill status={selectedLead?.status} />
-     </div>
+<p style={{ marginBottom: '0.25rem' }}>
+  <strong>{selectedLead?.name}</strong>
+</p>
+
+<p style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
+  📞 {selectedLead?.phone}</p>
+
+<p style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
+  ✉️ {selectedLead?.email}</p>
+
+<div style={{ marginBottom: '0.75rem', fontSize: '0.8rem' }}>
+  <span style={{ color: '#aaa', marginRight: '0.35rem' }}>Status:</span>
+  <StatusPill status={selectedLead?.status} />
+</div>
 
       {/* Messages list */}
 <div
