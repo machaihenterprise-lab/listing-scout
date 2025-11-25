@@ -469,63 +469,72 @@ export default function Home() {
               <p>No HOT leads yet.</p>
             ) : (
               <ul
-                style={{
-                  listStyle: 'none',
-                  padding: 0,
-                  margin: 0,
-                }}
-              >
-                {leads
-                  .filter((l) => l.status === "HOT")
-                  .map((lead) => {
-                  const isSelected = selectedLead && selectedLead.id === lead.id;
+  style={{
+    listStyle: "none",
+    padding: 0,
+    margin: 0,
+  }}
+>
+  {leads.filter((l) => l.status === "HOT").length === 0 ? (
+    <li
+      style={{
+        padding: "1rem 0.75rem",
+        borderRadius: "0.75rem",
+        fontSize: "0.9rem",
+        color: "#b4b4b4",
+      }}
+    >
+      No hot leads right now.
+      <br />
+      <span style={{ fontSize: "0.8rem", opacity: 0.9 }}>
+        When someone replies with intent to talk, they’ll appear here.
+      </span>
+    </li>
+  ) : (
+    leads
+      .filter((l) => l.status === "HOT")
+      .map((lead) => (
+        <li
+          key={lead.id}
+          onClick={() => handleSelectLead(lead)}
+          style={{
+            padding: "0.75rem 1rem",
+            borderRadius: "0.75rem",
+            border: "1px solid #374151",
+            marginBottom: "0.5rem",
+            cursor: "pointer",
+            borderColor: selectedLead?.id === lead.id ? "#fbbf24" : "#374151",
+            backgroundColor:
+              selectedLead?.id === lead.id
+                ? "rgba(251, 191, 36, 0.05)"
+                : "rgba(15,23,42,0.6)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div>
+              <strong>{lead.name || "Unnamed lead"}</strong>
+              <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>
+                {lead.phone}
+              </div>
+              {lead.email && (
+                <div style={{ fontSize: "0.8rem", opacity: 0.8 }}>
+                  {lead.email}
+                </div>
+              )}
+            </div>
+            <StatusPill status={lead.status} />
+          </div>
+        </li>
+      ))
+  )}
+</ul>
 
-                 return (
-                   <li
-                     key={lead.id}
-                     onClick={() => handleSelectLead(lead)}
-                     style={{
-                      padding: "0.9rem 1rem",
-                      borderRadius: "0.9rem",
-                      marginBottom: "0.75rem",
-                      cursor: "pointer",
-                      border: isSelected ? "1px solid #fbbf24" : "1px solid #1f2937",
-                      background:
-                       isSelected
-                         ? "radial-gradient(circle at top left, rgba(251,191,36,0.18), #020617)"
-                         : "#020617",
-                      boxShadow: isSelected
-                        ? "0 12px 24px rgba(0,0,0,0.7)"
-                        : "0 8px 18px rgba(0,0,0,0.55)",
-                      transition: "background 150ms ease, box-shadow 150ms ease, transform 120ms ease",
-                    }}
-                     className="hover:-translate-y-[1px] hover:shadow-lg"
-
-                 >
-                   <div
-                     style={{
-                     display: "flex",
-                     justifyContent: "space-between",
-                     alignItems: "center",
-                     width: "100%",
-                   }}
-                 >
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                     <strong>{lead.name || "Unnamed lead"}</strong>
-                     <span style={{ fontSize: "0.85rem", opacity: 0.9 }}>📞 {lead.phone}</span>
-                     {lead.email && (
-                       <span style={{ fontSize: "0.85rem", opacity: 0.9 }}>📧 {lead.email}</span>
-                     )}
-                   </div>
-
-                   <StatusPill status={lead.status} />
-                  </div>
-
-               </li>
-          );
-       })}
-
-              </ul>
             )}
           </section>
 
@@ -617,11 +626,45 @@ export default function Home() {
   <h2 style={{ marginBottom: '0.75rem' }}>Conversation</h2>
 
   {!selectedLead ? (
-    <p style={{ color: '#aaa' }}>
-      Select a HOT lead on the left to see their details and SMS conversation here.
-    </p>
-  ) : (
+  <div
+    style={{
+      height: "100%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      textAlign: "center",
+      padding: "2rem 1.5rem",
+    }}
+  >
     <div>
+      <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📱</div>
+      <h2
+        style={{
+          fontSize: "1.3rem",
+          marginBottom: "0.5rem",
+          fontWeight: 600,
+        }}
+      >
+        No lead selected
+      </h2>
+      <p
+        style={{
+          color: "#b4b4b4",
+          fontSize: "0.95rem",
+          marginBottom: "0.25rem",
+        }}
+      >
+        Choose a HOT lead on the left to open the conversation.
+      </p>
+      <p style={{ color: "#6b7280", fontSize: "0.85rem" }}>
+        You’ll see all incoming replies and can SMS them from here.
+      </p>
+    </div>
+  </div>
+) : (
+  <div>   
+)}
+
       {/* Lead header */}
       <p style={{ marginBottom: '0.25rem' }}>
         <strong>{selectedLead.name}</strong>
@@ -649,11 +692,25 @@ export default function Home() {
         }}
       >
         {conversation.length === 0 ? (
-          <p style={{ color: '#aaa', margin: 0 }}>
-            No messages for this lead yet.
-          </p>
-        ) : (
-          conversation.map((msg: any) => {
+  <div
+    style={{
+      textAlign: 'center',
+      padding: '2rem 1rem',
+      color: '#888',
+      fontSize: '0.9rem',
+      lineHeight: 1.5
+    }}
+  >
+    <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>💬</div>
+    <strong>No messages yet</strong>
+    <p style={{ marginTop: '0.25rem', fontSize: '0.85rem' }}>
+      Start the conversation by sending a message below.
+    </p>
+  </div>
+) : (
+  
+  conversation.map((msg: any) => {
+
             const isInbound = msg.direction === 'INBOUND';
             return (
               <div
