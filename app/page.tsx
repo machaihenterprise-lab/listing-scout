@@ -339,8 +339,8 @@ export default function Home() {
       style={{
         minHeight: '100vh',
         maxWidth: '1100px',
-        margin: '0 auto',
-        padding: '6rem 1rem 2rem',
+        margin: '4.5rem auto 0',
+        padding: '2rem 1rem',
         fontFamily:
           'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
         color: '#f9fafb',
