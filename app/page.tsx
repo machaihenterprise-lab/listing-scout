@@ -328,9 +328,10 @@ export default function Home() {
 
 
   return (
-    <>
-    <Header /> 
-    <main>...</main>
+  <>
+    <Header />
+   
+    <main
       style={{
         minHeight: '100vh',
         maxWidth: '1100px',
@@ -687,6 +688,7 @@ export default function Home() {
   )}
 </aside>
       </div>
-    </main>
-  );
+        </main>
+  </>
+);
 }
