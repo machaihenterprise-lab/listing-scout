@@ -54,11 +54,15 @@ function Header() {
       </h2>
 
       {/* Desktop Navigation */}
-      <nav style={{ display: "flex", gap: "1.5rem" }} className="hidden lg:flex">
-        <a href="#" style={{ opacity: 0.8 }}>Leads</a>
-        <a href="#" style={{ opacity: 0.8 }}>Settings</a>
-        <a href="#" style={{ opacity: 0.8 }}>Account</a>
-      </nav>
+     <nav
+      className="hidden lg:flex"
+      style={{ gap: '1.5rem' }}
+    >
+     <a href="#" style={{ opacity: 0.8 }}>Leads</a>
+     <a href="#" style={{ opacity: 0.8 }}>Settings</a>
+     <a href="#" style={{ opacity: 0.8 }}>Account</a>
+     </nav>
+
 
       {/* Mobile Menu Icon */}
       <div className="lg:hidden">
@@ -336,7 +340,7 @@ export default function Home() {
         minHeight: '100vh',
         maxWidth: '1100px',
         margin: '0 auto',
-        padding: '2rem 1rem',
+        padding: '6rem 1rem 2rem',
         fontFamily:
           'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
         color: '#f9fafb',
