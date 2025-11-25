@@ -692,22 +692,22 @@ export default function Home() {
         }}
       >
         {conversation.length === 0 ? (
-  <div
-    style={{
-      textAlign: 'center',
-      padding: '2rem 1rem',
-      color: '#888',
-      fontSize: '0.9rem',
-      lineHeight: 1.5
-    }}
-  >
-    <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>💬</div>
-    <strong>No messages yet</strong>
-    <p style={{ marginTop: '0.25rem', fontSize: '0.85rem' }}>
-      Start the conversation by sending a message below.
-    </p>
-  </div>
-) : (
+         <div
+           style={{
+            textAlign: 'center',
+            padding: '3rem 1rem',
+            opacity: 0.6,
+         }}
+       >
+          <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>💬</div>
+          <p style={{ fontSize: '1rem', marginBottom: '0.5rem', fontWeight: 600 }}>
+            No messages yet
+         </p>
+        <p style={{ fontSize: '0.85rem' }}>
+          This lead hasn’t replied yet. Start the conversation below.
+        </p>
+      </div>
+    ) : (
   
   conversation.map((msg: any) => {
 
