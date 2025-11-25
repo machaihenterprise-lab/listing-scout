@@ -347,9 +347,75 @@ export default function Home() {
         backgroundColor: '#020617',
       }}
     >
-      <h1 style={{ fontSize: '2rem', marginBottom: '1.5rem' }}>
-        Listing Scout — Leads (Live)
-      </h1>
+      <div style={{ marginBottom: "1.75rem" }}>
+  {/* Title */}
+  <h1
+    style={{
+      fontSize: "2rem",
+      fontWeight: 600,
+      marginBottom: "0.25rem",
+      letterSpacing: "-0.5px",
+    }}
+  >
+    Leads Dashboard
+  </h1>
+
+  {/* Subtitle */}
+  <p style={{ color: "#b4b4b4", fontSize: "0.95rem", marginBottom: "0.75rem" }}>
+    Your active pipeline
+  </p>
+
+  {/* Stats Row */}
+  <div
+    style={{
+      display: "flex",
+      gap: "1rem",
+      flexWrap: "wrap",
+      fontSize: "0.85rem",
+    }}
+  >
+    <span
+      style={{
+        backgroundColor: "rgba(255, 99, 71, 0.08)",
+        padding: "0.35rem 0.75rem",
+        borderRadius: "0.75rem",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.35rem",
+      }}
+    >
+      🔥 {leads.filter((l) => l.status === "HOT").length} Hot
+    </span>
+
+    <span
+      style={{
+        backgroundColor: "rgba(16, 185, 129, 0.08)",
+        padding: "0.35rem 0.75rem",
+        borderRadius: "0.75rem",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.35rem",
+      }}
+    >
+      🌱 {leads.filter((l) => l.status === "NURTURE").length} Nurture
+    </span>
+
+    <span
+      style={{
+        backgroundColor: "rgba(148, 163, 184, 0.08)",
+        padding: "0.35rem 0.75rem",
+        borderRadius: "0.75rem",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.35rem",
+      }}
+    >
+      📁 {leads.length} Total
+    </span>
+  </div>
+</div>
+
+
 
       <div className="flex flex-col gap-6 items-stretch lg:flex-row lg:items-start">
         
