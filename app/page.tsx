@@ -662,9 +662,8 @@ export default function Home() {
     </div>
   </div>
 ) : (
-  <div>   
+  <div></div>
 )}
-
       {/* Lead header */}
       <p style={{ marginBottom: '0.25rem' }}>
         <strong>{selectedLead.name}</strong>
