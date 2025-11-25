@@ -428,29 +428,32 @@ export default function Home() {
             gap: '1.5rem',
           }}
         >
-          {/* Twilio test block */}
-          <div
-            style={{
-              padding: '1.5rem',
-              borderRadius: '1rem',
-              border: '1px solid #1f2937',
-            }}
-          >
-            <h2 style={{ marginBottom: '0.75rem' }}>Twilio Test</h2>
-            
-            <button
-              type="button"
-              disabled={smsLoading}
-              onClick={handleSendTestSms}
-           >
-             {smsLoading ? "Sending…" : "Send Test SMS"}
-            </button>
+          {false && (
+  <>
+    {/* Twilio test block */}
+    <div
+      style={{
+        padding: '1.5rem',
+        borderRadius: '1rem',
+        border: '1px solid #1f2937',
+      }}
+    >
+      <h2 style={{ marginBottom: '0.75rem' }}>Twilio Test</h2>
 
-            {smsMessage && (
-             <p style={{ marginTop: "0.5rem" }}>{smsMessage}</p>
+      <button
+        type="button"
+        disabled={smsLoading}
+        onClick={handleSendTestSms}
+      >
+        {smsLoading ? "Sending…" : "Send Test SMS"}
+      </button>
+
+      {smsMessage && (
+        <p style={{ marginTop: "0.5rem" }}>{smsMessage}</p>
       )}
-
-          </div>
+    </div>
+  </>
+)}
 
           {/* HOT List */}
           <section
