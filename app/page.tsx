@@ -681,72 +681,86 @@ export default function Home() {
      </div>
 
       {/* Messages list */}
+<div
+  style={{
+    borderRadius: '0.75rem',
+    border: '1px solid #444',
+    padding: '0.75rem 1rem',
+    maxHeight: '260px',
+    overflowY: 'auto',
+    marginBottom: '0.75rem',
+  }}
+>
+  {conversation.length === 0 ? (
+    <div
+      style={{
+        textAlign: 'center',
+        padding: '3rem 1rem',
+        opacity: 0.7,
+        color: '#888',
+        fontSize: '0.9rem',
+        lineHeight: 1.5,
+      }}
+    >
       <div
         style={{
-          borderRadius: '0.75rem',
-          border: '1px solid #444',
-          padding: '0.75rem 1rem',
-          maxHeight: '260px',
-          overflowY: 'auto',
-          marginBottom: '0.75rem',
+          fontSize: '1.1rem',
+          marginBottom: '0.5rem',
+          fontWeight: 600,
         }}
       >
-        {conversation.length === 0 ? (
-         <div
-           style={{
-            textAlign: 'center',
-            padding: '3rem 1rem',
-            opacity: 0.6,
-         }}
-       >
-          <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>💬</div>
-          <p style={{ fontSize: '1rem', marginBottom: '0.5rem', fontWeight: 600 }}>
-            No messages yet
-         </p>
-        <p style={{ fontSize: '0.85rem' }}>
-          This lead hasn’t replied yet. Start the conversation below.
-        </p>
+        No messages yet
       </div>
-    ) : (
-  
-  conversation.map((msg: any) => {
+      <p
+        style={{
+          marginTop: '0.25rem',
+          fontSize: '0.85rem',
+        }}
+      >
+        Start the conversation by sending a message below.
+      </p>
+    </div>
+  ) : (
+    conversation.map((msg: any) => {
+      const isInbound = msg.direction === 'INBOUND';
 
-            const isInbound = msg.direction === 'INBOUND';
-            return (
-              <div
-                key={msg.id}
-                style={{
-                  marginBottom: '0.5rem',
-                  textAlign: isInbound ? 'left' : 'right',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'inline-block',
-                    padding: '0.5rem 0.75rem',
-                    borderRadius: '0.75rem',
-                    border: '1px solid #555',
-                    backgroundColor: isInbound ? '#111' : '#1a1a2a',
-                    maxWidth: '100%',
-                  }}
-                >
-                  <p style={{ margin: 0, fontSize: '0.9rem' }}>{msg.body}</p>
-                </div>
-                <p
-                  style={{
-                    margin: '0.25rem 0 0',
-                    fontSize: '0.7rem',
-                    color: '#888',
-                  }}
-                >
-                  {isInbound ? 'From lead' : 'You'} ·{' '}
-                  {new Date(msg.created_at).toLocaleString()}
-                </p>
-              </div>
-            );
-          })
-        )}
-      </div>
+      return (
+        <div
+          key={msg.id}
+          style={{
+            marginBottom: '0.5rem',
+            display: 'flex',
+            justifyContent: isInbound ? 'flex-start' : 'flex-end',
+          }}
+        >
+          <div
+            style={{
+              maxWidth: '80%',
+              padding: '0.5rem 0.75rem',
+              borderRadius: '0.75rem',
+              fontSize: '0.9rem',
+              backgroundColor: isInbound ? '#111827' : '#1f2933',
+              border: '1px solid #374151',
+            }}
+          >
+            <p style={{ margin: 0 }}>{msg.body}</p>
+            <p
+              style={{
+                margin: 0,
+                marginTop: '0.25rem',
+                fontSize: '0.75rem',
+                color: '#9ca3af',
+              }}
+            >
+              {isInbound ? 'From lead' : 'You'} ·{' '}
+              {new Date(msg.created_at).toLocaleString()}
+            </p>
+          </div>
+        </div>
+      );
+    })
+  )}
+</div>
 
       {/* Reply form */}
       <div
