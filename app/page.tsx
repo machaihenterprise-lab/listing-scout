@@ -30,6 +30,44 @@ type MessageRow = {
   created_at: string;
 };
 
+function Header() {
+  return (
+    <header
+      style={{
+        width: "100%",
+        padding: "1rem 2rem",
+        marginBottom: "2rem",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        backdropFilter: "blur(10px)",
+        backgroundColor: "rgba(255,255,255,0.05)",
+        borderBottom: "1px solid rgba(255,255,255,0.1)",
+        position: "sticky",
+        top: 0,
+        zIndex: 50,
+      }}
+    >
+      {/* Logo / Title */}
+      <h2 style={{ fontSize: "1.5rem", fontWeight: 600 }}>
+        Listing Scout
+      </h2>
+
+      {/* Desktop Navigation */}
+      <nav style={{ display: "flex", gap: "1.5rem" }} className="hidden lg:flex">
+        <a href="#" style={{ opacity: 0.8 }}>Leads</a>
+        <a href="#" style={{ opacity: 0.8 }}>Settings</a>
+        <a href="#" style={{ opacity: 0.8 }}>Account</a>
+      </nav>
+
+      {/* Mobile Menu Icon */}
+      <div className="lg:hidden">
+        <span style={{ fontSize: "1.5rem" }}>☰</span>
+      </div>
+    </header>
+  );
+}
+
 function StatusPill({ status }: { status?: string | null }) {
   const normalized = (status || "").toUpperCase();
 
@@ -290,7 +328,9 @@ export default function Home() {
 
 
   return (
-    <main
+    <>
+    <Header /> 
+    <main>...</main>
       style={{
         minHeight: '100vh',
         maxWidth: '1100px',
