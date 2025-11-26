@@ -467,14 +467,16 @@ if (!selectedLead && mappedLeads.length > 0) {
           </div>
         </div>
 
-        {/* Main layout */}
+           {/* Main layout */}
         <div
+          className="ls-main-layout"
           style={{
             display: "flex",
             gap: "1.5rem",
             alignItems: "stretch",
           }}
         >
+
           {/* LEFT COLUMN */}
           <div
             style={{
@@ -720,7 +722,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                       <div
                         style={{
                           display: "flex",
-                          alignItems: "flex-start",
+                          alignItems: "center",
                           marginBottom: "0.75rem",
                         }}
                       >
@@ -779,7 +781,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                         <div
                           style={{
                             display: "flex",
-                            alignItems: "flex-start",
+                            alignItems: "center",
                             marginBottom: "0.75rem",
                           }}
                         >
@@ -831,7 +833,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                         <div
                           style={{
                             display: "flex",
-                            alignItems: "flex-start",
+                            alignItems: "center",
                             marginBottom: "0.75rem",
                           }}
                         >
@@ -1080,7 +1082,20 @@ if (!selectedLead && mappedLeads.length > 0) {
               </p>
             </div>
           </aside>
-        </div>
+        </div> {/* closing right-hand <aside> wrapper */}
+
+        {/* Layout responsive rules */}
+        <style jsx>{`
+          .ls-main-layout {
+            flex-direction: row;
+          }
+
+          @media (max-width: 900px) {
+            .ls-main-layout {
+              flex-direction: column;
+            }
+          }
+        `}</style>
       </main>
     </>
   );
