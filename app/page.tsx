@@ -532,9 +532,12 @@ if (!selectedLead && mappedLeads.length > 0) {
             cursor: "pointer",
             borderColor: selectedLead?.id === lead.id ? "#fbbf24" : "#374151",
             backgroundColor:
-              selectedLead?.id === lead.id
-                ? "rgba(251, 191, 36, 0.05)"
-                : "rgba(15,23,42,0.6)",
+            selectedLead?.id === lead.id
+            ? "rgba(251, 191, 36, 0.05)" // currently selected lead
+            : isOverdue
+            ? "rgba(255, 99, 71, 0.15)"  // 🔴 subtle overdue highlight
+            : "rgba(15, 23, 42, 0.6)",   // normal state
+
           }}
         >
           <div
