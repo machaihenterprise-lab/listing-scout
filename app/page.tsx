@@ -1160,14 +1160,9 @@ if (!selectedLead && mappedLeads.length > 0) {
       >
         Replies here send an SMS to this lead and are logged in the conversation
         above.
- </p>
-</aside>
-</div>
-</main>
-</>
-);
-}
-
-
-     
-    
+       </p>
+     </aside>
+    </div>
+   </main>
+  );
+ }
