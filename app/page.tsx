@@ -599,9 +599,35 @@ if (!selectedLead && mappedLeads.length > 0) {
                   </p>
                 </div>
 
-                <StatusPill status={lead.status} />
-              </div>
-            </li>
+                   </div>   // end of last-contacted block
+
+                   <div 
+                   style={{ 
+                   display:"flex",
+                   alignItems:"center", 
+                   gap:"0.5rem"
+                    }}
+                    >
+                    <StatusPill status={lead.status} />
+
+                   {isOverdue && (
+                     <span
+                       style={{
+                       fontSize: "0.7rem",
+                       padding: "0.15rem 0.4rem",
+                       borderRadius: "999px",
+                       backgroundColor: "rgba(248, 113, 113, 0.2)",
+                       border: "1px solid rgba(248, 113, 113, 0.7)",
+                       color: "#fecaca",
+                     }}
+                   >
+                 Overdue
+               </span>
+             )}
+          </div>
+
+        </li>
+
           );
         })}
     </ul>
