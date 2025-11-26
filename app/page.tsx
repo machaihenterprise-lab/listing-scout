@@ -103,6 +103,24 @@ function StatusPill({ status }: { status?: string | null }) {
   );
 }
 
+function formatShortDateTime(dateString: string | null | undefined) {
+  if (!dateString) return "";
+  const d = new Date(dateString);
+
+  const datePart = d.toLocaleDateString("en-US", {
+    month: "short", // Nov
+    day: "numeric", // 27
+  });
+
+  const timePart = d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  return `${datePart} at ${timePart}`;
+}
+
+
 export default function Home() {
   // Lead form state
   const [name, setName] = useState('');
@@ -833,16 +851,23 @@ if (!selectedLead && mappedLeads.length > 0) {
 
     {/* Event 3 */}
     {selectedLead?.next_nurture_at && (
-      <div style={{ marginBottom: "0.65rem" }}>
-        <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
-          {new Date(selectedLead.next_nurture_at).toLocaleTimeString("en-US", {
-            hour: "numeric",
-            minute: "2-digit",
-          })}
-        </div>
-        <div>System scheduled next nurture SMS</div>
-      </div>
-    )}
+  <div style={{ marginBottom: "0.65rem" }}>
+    <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+      Upcoming
+    </div>
+    <div
+      style={{
+        fontSize: "0.9rem",
+        fontWeight: 500,
+        color: "#facc15", // soft yellow highlight for “pending”
+      }}
+    >
+      Scheduled next message:{" "}
+      {formatShortDateTime(selectedLead.next_nurture_at)}
+    </div>
+  </div>
+)}
+
   </div>
 
   {/* You are here */}
@@ -870,6 +895,53 @@ if (!selectedLead && mappedLeads.length > 0) {
       >
         Start the conversation by sending a message below.
       </p>
+      <div
+  style={{
+    marginTop: "0.5rem",
+    display: "flex",
+    gap: "0.5rem",
+    flexWrap: "wrap",
+  }}
+>
+  <button
+    type="button"
+    style={{
+      padding: "0.35rem 0.75rem",
+      borderRadius: "999px",
+      border: "1px solid #374151",
+      backgroundColor: "rgba(55,65,81,0.4)",
+      fontSize: "0.8rem",
+      cursor: "pointer",
+    }}
+    onClick={() =>
+      setReplyText(
+        "Hi, this is [Your Name] with [Your Brokerage]. I wanted to personally introduce myself and see where you are in your plans to sell."
+      )
+    }
+  >
+    👋 Send Intro
+  </button>
+
+  <button
+    type="button"
+    style={{
+      padding: "0.35rem 0.75rem",
+      borderRadius: "999px",
+      border: "1px solid #374151",
+      backgroundColor: "rgba(55,65,81,0.4)",
+      fontSize: "0.8rem",
+      cursor: "pointer",
+    }}
+    onClick={() =>
+      setReplyText(
+        "Do you have 10–15 minutes this week for a quick call so I can give you a pricing + timing game plan for your home?"
+      )
+    }
+  >
+    📅 Book Call
+  </button>
+</div>
+
     </div>
   ) : (
     conversation.map((msg: any) => {
