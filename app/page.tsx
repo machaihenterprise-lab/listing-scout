@@ -244,6 +244,14 @@ if (!selectedLead && mappedLeads.length > 0) {
         body: trimmed,
       }),
     });
+     // Update last_contacted_at timestamp for this lead
+      await supabase
+      .from("leads")
+      .update({ last_contacted_at: new Date().toISOString() })
+      .eq("id", selectedLead.id);
+
+     // Refresh leads so UI shows updated “Last contacted”
+      await fetchLeads();
 
     // Try to parse JSON, but don't explode if it's not valid
     const data = await res.json().catch(() => ({} as any));
