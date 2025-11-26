@@ -518,9 +518,16 @@ if (!selectedLead && mappedLeads.length > 0) {
       </span>
     </li>
   ) : (
-    leads
-      .filter((l) => l.status === "HOT")
-      .map((lead) => (
+   <ul>
+  {leads
+    .filter((l) => l.status === "HOT")
+    .map((lead) => {
+      const isOverdue =
+        !lead.lastContactedAt ||
+        new Date().getTime() - new Date(lead.lastContactedAt).getTime() >
+          7 * 24 * 60 * 60 * 1000; // 7 days
+
+      return (
         <li
           key={lead.id}
           onClick={() => handleSelectLead(lead)}
@@ -530,14 +537,14 @@ if (!selectedLead && mappedLeads.length > 0) {
             border: "1px solid #374151",
             marginBottom: "0.5rem",
             cursor: "pointer",
-            borderColor: selectedLead?.id === lead.id ? "#fbbf24" : "#374151",
+            borderColor:
+              selectedLead?.id === lead.id ? "#fbbf24" : "#374151",
             backgroundColor:
-            selectedLead?.id === lead.id
-            ? "rgba(251, 191, 36, 0.05)" // currently selected lead
-            : isOverdue
-            ? "rgba(255, 99, 71, 0.15)"  // 🔴 subtle overdue highlight
-            : "rgba(15, 23, 42, 0.6)",   // normal state
-
+              selectedLead?.id === lead.id
+                ? "rgba(251, 191, 36, 0.05)" // currently selected lead
+                : isOverdue
+                ? "rgba(255, 99, 71, 0.15)" // 🔴 subtle overdue highlight
+                : "rgba(15, 23, 42, 0.6)", // normal state
           }}
         >
           <div
@@ -549,35 +556,41 @@ if (!selectedLead && mappedLeads.length > 0) {
           >
             <div>
               <strong>{lead.name || "Unnamed lead"}</strong>
+
               <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>
                 {lead.phone}
               </div>
+
               {lead.email && (
                 <div style={{ fontSize: "0.8rem", opacity: 0.8 }}>
                   {lead.email}
-                  <p
-                    style={{
-                    fontSize: '0.75rem',
-                    color: '#9ca3af',
-                    marginTop: '0.25rem',
-                  }}
-                 >
-                   Last contacted:{' '}
-                   {lead.lastContactedAt
-                     ? new Date(lead.lastContactedAt).toLocaleDateString()
-                     : 'Never'}
-                 </p>
-
                 </div>
               )}
+
+              <p
+                style={{
+                  fontSize: "0.75rem",
+                  color: "#9ca3af",
+                  marginTop: "0.25rem",
+                }}
+              >
+                Last contacted:{" "}
+                {lead.lastContactedAt
+                  ? new Date(
+                      lead.lastContactedAt
+                    ).toLocaleDateString()
+                  : "Never"}
+              </p>
             </div>
+
             <StatusPill status={lead.status} />
           </div>
         </li>
-      ))
+      );
+    })}
+</ul>
   )}
 </ul>
-
             )}
           </section>
 
