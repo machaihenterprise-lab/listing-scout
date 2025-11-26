@@ -803,7 +803,63 @@ if (!selectedLead && mappedLeads.length > 0) {
           fontWeight: 600,
         }}
       >
-        No messages yet
+        conversation.length === 0 ? (  ...THIS... ) : ( render messages )
+        <div style={{ padding: "0.25rem 0" }}>
+          {/* Timeline block */}
+        <div style={{ marginBottom: "1rem" }}>
+           {/* Event 1 */}
+        <div style={{ marginBottom: "0.65rem" }}>
+        <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+        {selectedLead?.created_at
+          ? new Date(selectedLead.created_at).toLocaleTimeString("en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+            })
+          : ""}
+      </div>
+      <div>Lead captured{selectedLead?.source ? ` from ${selectedLead.source}` : ""}</div>
+    </div>
+
+    {/* Event 2 */}
+    {selectedLead?.nurture_status && (
+      <div style={{ marginBottom: "0.65rem" }}>
+        <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}></div>
+        <div>
+          Added to workflow ({selectedLead.nurture_status.toLowerCase()})
+        </div>
+      </div>
+    )}
+
+    {/* Event 3 */}
+    {selectedLead?.next_nurture_at && (
+      <div style={{ marginBottom: "0.65rem" }}>
+        <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+          {new Date(selectedLead.next_nurture_at).toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        </div>
+        <div>System scheduled next nurture SMS</div>
+      </div>
+    )}
+  </div>
+
+  {/* You are here */}
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      fontSize: "0.75rem",
+      color: "#9ca3af",
+      marginTop: "1rem",
+    }}
+  >
+    <div style={{ flex: 1, height: "1px", backgroundColor: "#374151" }} />
+    <span style={{ padding: "0 0.5rem" }}>[ Now you are here ]</span>
+    <div style={{ flex: 1, height: "1px", backgroundColor: "#374151" }} />
+  </div>
+</div>
+
       </div>
       <p
         style={{
