@@ -487,13 +487,13 @@ if (!selectedLead && mappedLeads.length > 0) {
   </>
 )}
 
-    {/* HOT List */}
-    <section
-    style={{
+   {/* HOT List */}
+<section
+  style={{
     padding: "1.5rem",
     borderRadius: "1rem",
     border: "1px solid #1f2937",
-    marginBottom: "1.5rem",
+    marginBottom: "2rem",
   }}
 >
   <h2 style={{ marginBottom: "0.75rem" }}>Leads to Call Now (HOT)</h2>
@@ -501,7 +501,7 @@ if (!selectedLead && mappedLeads.length > 0) {
   {loadingLeads ? (
     <p>Loading leads...</p>
   ) : leads.filter((l) => l.status === "HOT").length === 0 ? (
-    <p>No HOT leads right now.</p>
+    <p>No HOT leads yet.</p>
   ) : (
     <ul
       style={{
@@ -537,11 +537,12 @@ if (!selectedLead && mappedLeads.length > 0) {
           return aTime - bTime;
         })
         .map((lead) => {
+          const now = Date.now();
           const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
+
           const isOverdue =
             !lead.lastContactedAt ||
-            new Date(lead.lastContactedAt).getTime() <
-              Date.now() - THREE_DAYS;
+            new Date(lead.lastContactedAt).getTime() < now - THREE_DAYS;
 
           return (
             <li
@@ -557,9 +558,9 @@ if (!selectedLead && mappedLeads.length > 0) {
                   selectedLead?.id === lead.id ? "#fbbf24" : "#374151",
                 backgroundColor:
                   selectedLead?.id === lead.id
-                    ? "rgba(251, 191, 36, 0.05)" // currently selected
+                    ? "rgba(251, 191, 36, 0.05)" // selected
                     : isOverdue
-                    ? "rgba(255, 99, 71, 0.15)" // overdue glow
+                    ? "rgba(255, 99, 71, 0.15)" // overdue
                     : "rgba(15, 23, 42, 0.6)", // normal
               }}
             >
@@ -599,35 +600,32 @@ if (!selectedLead && mappedLeads.length > 0) {
                   </p>
                 </div>
 
-                   </div>         {/* end of last-contacted block */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <StatusPill status={lead.status} />
 
-                   <div 
-                   style={{ 
-                   display:"flex",
-                   alignItems:"center", 
-                   gap:"0.5rem"
-                    }}
+                  {isOverdue && (
+                    <span
+                      style={{
+                        fontSize: "0.7rem",
+                        padding: "0.15rem 0.4rem",
+                        borderRadius: "999px",
+                        backgroundColor: "rgba(248, 113, 113, 0.2)",
+                        border: "1px solid rgba(248, 113, 113, 0.7)",
+                        color: "#fecaca",
+                      }}
                     >
-                    <StatusPill status={lead.status} />
-
-                   {isOverdue && (
-                     <span
-                       style={{
-                       fontSize: "0.7rem",
-                       padding: "0.15rem 0.4rem",
-                       borderRadius: "999px",
-                       backgroundColor: "rgba(248, 113, 113, 0.2)",
-                       border: "1px solid rgba(248, 113, 113, 0.7)",
-                       color: "#fecaca",
-                     }}
-                   >
-                 Overdue
-               </span>
-             )}
-          </div>
-
-        </li>
-
+                      Overdue
+                    </span>
+                  )}
+                </div>
+              </div>
+            </li>
           );
         })}
     </ul>
