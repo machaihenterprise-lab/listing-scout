@@ -804,21 +804,22 @@ if (!selectedLead && mappedLeads.length > 0) {
           fontWeight: 600,
         }}
       >
-        conversation.length === 0 ? (  ...THIS... ) : ( render messages )
-        <div style={{ padding: "0.25rem 0" }}>
+      conversation.length === 0 ? (  ...THIS... ) : ( render messages )
+        <div  style={{ padding: "0.25rem 0" }}>
           {/* Timeline block */}
-        <div style={{ marginBottom: "1rem" }}>
+         <div style={{ marginBottom: "1rem" }}>
            {/* Event 1 */}
-        <div style={{ marginBottom: "0.65rem" }}>
-        <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
-        {selectedLead?.created_at
-          ? new Date(selectedLead.created_at).toLocaleTimeString("en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-            })
+          <div style={{ marginBottom: "0.65rem" }}>
+           <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+             {selectedLead?.created_at
+              ? new Date(selectedLead.created_at).toLocaleTimeString("en-US", {
+                 hour: "numeric",
+                 minute: "2-digit",
+                })
           : ""}
       </div>
-      <div>Lead captured{selectedLead?.source ? ` from ${selectedLead.source}` : ""}</div>
+      <div>
+        Lead captured{selectedLead?.source ? ` from ${selectedLead.source}` : ""}</div>
     </div>
 
     {/* Event 2 */}
