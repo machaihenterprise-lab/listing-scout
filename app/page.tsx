@@ -382,7 +382,7 @@ if (!selectedLead && mappedLeads.length > 0) {
 }, [selectedLead?.id]);
 
 
-   return (
+    return (
     <>
       <Header />
 
@@ -398,7 +398,7 @@ if (!selectedLead && mappedLeads.length > 0) {
           backgroundColor: "#020617",
         }}
       >
-        {/* Title */}
+        {/* Title + stats */}
         <div style={{ marginBottom: "1.75rem" }}>
           <h1
             style={{
@@ -419,7 +419,6 @@ if (!selectedLead && mappedLeads.length > 0) {
             Your active pipeline
           </p>
 
-          {/* Stats row */}
           <div
             style={{
               display: "flex",
@@ -440,6 +439,7 @@ if (!selectedLead && mappedLeads.length > 0) {
             >
               🔥 {leads.filter((l) => l.status === "HOT").length} Hot
             </span>
+
             <span
               style={{
                 backgroundColor: "rgba(16, 185, 129, 0.08)",
@@ -452,6 +452,7 @@ if (!selectedLead && mappedLeads.length > 0) {
             >
               🌱 {leads.filter((l) => l.status === "NURTURE").length} Nurture
             </span>
+
             <span
               style={{
                 backgroundColor: "rgba(148, 163, 184, 0.08)",
@@ -467,7 +468,7 @@ if (!selectedLead && mappedLeads.length > 0) {
           </div>
         </div>
 
-           {/* Main layout */}
+        {/* Main layout: left = list + add, right = conversation */}
         <div
           className="ls-main-layout"
           style={{
@@ -476,7 +477,6 @@ if (!selectedLead && mappedLeads.length > 0) {
             alignItems: "stretch",
           }}
         >
-
           {/* LEFT COLUMN */}
           <div
             style={{
@@ -492,7 +492,6 @@ if (!selectedLead && mappedLeads.length > 0) {
                 padding: "1.5rem",
                 borderRadius: "1rem",
                 border: "1px solid #1f2937",
-                marginBottom: "0.5rem",
               }}
             >
               <h2 style={{ marginBottom: "0.75rem" }}>Leads to Call Now (HOT)</h2>
@@ -513,6 +512,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                     .filter((l) => l.status === "HOT")
                     .map((lead) => {
                       const isSelected = selectedLead?.id === lead.id;
+
                       return (
                         <li
                           key={lead.id}
@@ -556,6 +556,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                                 </div>
                               )}
                             </div>
+
                             <StatusPill status={lead.status} />
                           </div>
                         </li>
@@ -565,7 +566,7 @@ if (!selectedLead && mappedLeads.length > 0) {
               )}
             </section>
 
-            {/* Add Lead form */}
+            {/* Add Lead */}
             <section
               style={{
                 padding: "1.5rem",
@@ -574,6 +575,7 @@ if (!selectedLead && mappedLeads.length > 0) {
               }}
             >
               <h2 style={{ marginBottom: "0.75rem" }}>Add Lead</h2>
+
               <form onSubmit={addLead}>
                 <div style={{ marginBottom: "0.75rem" }}>
                   <input
@@ -591,6 +593,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                     }}
                   />
                 </div>
+
                 <div style={{ marginBottom: "0.75rem" }}>
                   <input
                     type="text"
@@ -607,6 +610,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                     }}
                   />
                 </div>
+
                 <div style={{ marginBottom: "0.75rem" }}>
                   <input
                     type="email"
@@ -657,7 +661,7 @@ if (!selectedLead && mappedLeads.length > 0) {
             </section>
           </div>
 
-          {/* RIGHT COLUMN: Conversation */}
+          {/* RIGHT COLUMN – Conversation */}
           <aside
             style={{
               flex: 1.2,
@@ -684,7 +688,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                 fontSize: "0.9rem",
               }}
             >
-              📧 {selectedLead?.email || " "}
+              📧 {selectedLead?.email || ""}
             </p>
             <div style={{ marginBottom: "0.75rem" }}>
               <span style={{ color: "#aaa", marginRight: "0.5rem" }}>
@@ -693,7 +697,7 @@ if (!selectedLead && mappedLeads.length > 0) {
               <StatusPill status={selectedLead?.status || null} />
             </div>
 
-            {/* Messages list */}
+            {/* Messages list / empty state */}
             <div
               style={{
                 borderRadius: "0.75rem",
@@ -705,7 +709,7 @@ if (!selectedLead && mappedLeads.length > 0) {
               }}
             >
               {conversation.length === 0 ? (
-                // EMPTY STATE: timeline + next message + chips
+                // EMPTY: timeline + “now you are here” + chips
                 <div
                   style={{
                     textAlign: "center",
@@ -718,7 +722,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                 >
                   <div style={{ padding: "0.25rem 0" }}>
                     <div style={{ marginBottom: "1rem" }}>
-                      {/* Event 1: Lead captured */}
+                      {/* Event 1 – Lead captured */}
                       <div
                         style={{
                           display: "flex",
@@ -752,7 +756,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                           />
                         </div>
 
-                        <div>
+                        <div style={{ textAlign: "left" }}>
                           <div
                             style={{
                               fontSize: "0.75rem",
@@ -776,7 +780,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                         </div>
                       </div>
 
-                      {/* Event 2: Added to workflow */}
+                      {/* Event 2 – Added to workflow */}
                       {selectedLead?.nurture_status && (
                         <div
                           style={{
@@ -811,7 +815,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                             />
                           </div>
 
-                          <div>
+                          <div style={{ textAlign: "left" }}>
                             <div
                               style={{
                                 fontSize: "0.75rem",
@@ -828,7 +832,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                         </div>
                       )}
 
-                      {/* Event 3: Scheduled next message */}
+                      {/* Event 3 – Scheduled next message */}
                       {selectedLead?.next_nurture_at && (
                         <div
                           style={{
@@ -855,7 +859,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                             />
                           </div>
 
-                          <div>
+                          <div style={{ textAlign: "left" }}>
                             <div
                               style={{
                                 fontSize: "0.75rem",
@@ -881,7 +885,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                       )}
                     </div>
 
-                    {/* You are here */}
+                    {/* Now you are here */}
                     <div
                       style={{
                         display: "flex",
@@ -919,7 +923,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                       Start the conversation by sending a message below.
                     </p>
 
-                    {/* Quick chips */}
+                    {/* Quick action chips */}
                     <div
                       style={{
                         marginTop: "0.5rem",
@@ -970,10 +974,11 @@ if (!selectedLead && mappedLeads.length > 0) {
                   </div>
                 </div>
               ) : (
-                // NON-EMPTY: render messages
+                // NON-EMPTY: show actual messages
                 <div style={{ padding: "0.25rem 0" }}>
                   {conversation.map((msg: MessageRow) => {
                     const isInbound = msg.direction === "INBOUND";
+
                     return (
                       <div
                         key={msg.id}
@@ -997,6 +1002,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                             }
                           )}
                         </div>
+
                         <div
                           style={{
                             display: "inline-block",
@@ -1082,9 +1088,9 @@ if (!selectedLead && mappedLeads.length > 0) {
               </p>
             </div>
           </aside>
-        </div> {/* closing right-hand <aside> wrapper */}
+        </div>
 
-        {/* Layout responsive rules */}
+        {/* Responsive layout rules */}
         <style jsx>{`
           .ls-main-layout {
             flex-direction: row;
