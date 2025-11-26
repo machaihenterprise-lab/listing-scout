@@ -804,8 +804,7 @@ if (!selectedLead && mappedLeads.length > 0) {
           fontWeight: 600,
         }}
       >
-      conversation.length === 0 ? (  ...THIS... ) : ( render messages )
-        <div  style={{ padding: "0.25rem 0" }}>
+         <div  style={{ padding: "0.25rem 0" }}>
           {/* Timeline block */}
          <div style={{ marginBottom: "1rem" }}>
            {/* Event 1 */}
