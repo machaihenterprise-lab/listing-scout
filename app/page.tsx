@@ -598,9 +598,7 @@ if (!selectedLead && mappedLeads.length > 0) {
                       : "Never"}
                   </p>
                 </div>
-
-                   </div>   // end of last-contacted block
-
+                 
                    <div 
                    style={{ 
                    display:"flex",
