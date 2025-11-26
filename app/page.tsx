@@ -533,7 +533,7 @@ if (!selectedLead && mappedLeads.length > 0) {
       const isOverdue =
         !lead.lastContactedAt ||
         new Date().getTime() - new Date(lead.lastContactedAt).getTime() >
-          7 * 24 * 60 * 60 * 1000; // 7 days
+          7 * 24 * 60 * 60 * 1000; // 3 days
 
       return (
         <li
