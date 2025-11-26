@@ -805,185 +805,298 @@ if (!selectedLead && mappedLeads.length > 0) {
   }}
 >
   {conversation.length === 0 ? (
-    <div
-      style={{
-        textAlign: 'center',
-        padding: '3rem 1rem',
-        opacity: 0.7,
-        color: '#888',
-        fontSize: '0.9rem',
-        lineHeight: 1.5,
-      }}
-    >
-      <div
-        style={{
-          fontSize: '1.1rem',
-          marginBottom: '0.5rem',
-          fontWeight: 600,
-        }}
-      >
-         <div  style={{ padding: "0.25rem 0" }}>
-          {/* Timeline block */}
-         <div style={{ marginBottom: "1rem" }}>
-           {/* Event 1 */}
-          <div style={{ marginBottom: "0.65rem" }}>
-           <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
-             {selectedLead?.created_at
-              ? new Date(selectedLead.created_at).toLocaleTimeString("en-US", {
-                 hour: "numeric",
-                 minute: "2-digit",
-                })
-          : ""}
-      </div>
-      <div>
-        Lead captured{selectedLead?.source ? ` from ${selectedLead.source}` : ""}</div>
-    </div>
-
-    {/* Event 2 */}
-    {selectedLead?.nurture_status && (
-      <div style={{ marginBottom: "0.65rem" }}>
-        <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}></div>
-        <div>
-          Added to workflow ({selectedLead.nurture_status.toLowerCase()})
-        </div>
-      </div>
-    )}
-
-    {/* Event 3 */}
-    {selectedLead?.next_nurture_at && (
-  <div style={{ marginBottom: "0.65rem" }}>
-    <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
-      Upcoming
-    </div>
-    <div
-      style={{
-        fontSize: "0.9rem",
-        fontWeight: 500,
-        color: "#facc15", // soft yellow highlight for “pending”
-      }}
-    >
-      Scheduled next message:{" "}
-      {formatShortDateTime(selectedLead.next_nurture_at)}
-    </div>
-  </div>
-)}
-
-  </div>
-
-  {/* You are here */}
+  // EMPTY STATE: timeline + next message + chips
   <div
     style={{
-      display: "flex",
-      alignItems: "center",
-      fontSize: "0.75rem",
-      color: "#9ca3af",
-      marginTop: "1rem",
+      textAlign: "center",
+      padding: "3rem 1rem",
+      opacity: 0.9,
+      color: "#e5e7eb",
+      fontSize: "0.9rem",
+      lineHeight: 1.5,
     }}
   >
-    <div style={{ flex: 1, height: "1px", backgroundColor: "#374151" }} />
-    <span style={{ padding: "0 0.5rem" }}>[ Now you are here ]</span>
-    <div style={{ flex: 1, height: "1px", backgroundColor: "#374151" }} />
-  </div>
-</div>
+    {/* Timeline container */}
+    <div style={{ padding: "0.25rem 0" }}>
+      <div style={{ marginBottom: "1rem" }}>
+        {/* Event 1: Lead captured */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            marginBottom: "0.75rem",
+          }}
+        >
+          {/* Dot + line */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              marginRight: "0.75rem",
+            }}
+          >
+            <div
+              style={{
+                width: "0.5rem",
+                height: "0.5rem",
+                borderRadius: "999px",
+                backgroundColor: "#9ca3af",
+              }}
+            />
+            <div
+              style={{
+                flex: 1,
+                width: "1px",
+                backgroundColor: "#374151",
+                marginTop: "0.15rem",
+              }}
+            />
+          </div>
 
+          {/* Text */}
+          <div>
+            <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+              {selectedLead?.created_at &&
+                new Date(selectedLead.created_at).toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+            </div>
+            <div>
+              Lead captured
+              {selectedLead?.source ? ` from ${selectedLead.source}` : ""}
+            </div>
+          </div>
+        </div>
+
+        {/* Event 2: Added to workflow */}
+        {selectedLead?.nurture_status && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              marginBottom: "0.75rem",
+            }}
+          >
+            {/* Dot + line */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                marginRight: "0.75rem",
+              }}
+            >
+              <div
+                style={{
+                  width: "0.5rem",
+                  height: "0.5rem",
+                  borderRadius: "999px",
+                  backgroundColor: "#9ca3af",
+                }}
+              />
+              <div
+                style={{
+                  flex: 1,
+                  width: "1px",
+                  backgroundColor: "#374151",
+                  marginTop: "0.15rem",
+                }}
+              />
+            </div>
+
+            {/* Text */}
+            <div>
+              <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+                Workflow
+              </div>
+              <div>
+                Added to workflow ({selectedLead.nurture_status.toLowerCase()})
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Event 3: Scheduled next message (upcoming) */}
+        {selectedLead?.next_nurture_at && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              marginBottom: "0.75rem",
+            }}
+          >
+            {/* Highlighted dot, no line */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                marginRight: "0.75rem",
+              }}
+            >
+              <div
+                style={{
+                  width: "0.6rem",
+                  height: "0.6rem",
+                  borderRadius: "999px",
+                  backgroundColor: "#facc15",
+                }}
+              />
+            </div>
+
+            {/* Text */}
+            <div>
+              <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+                Upcoming
+              </div>
+              <div
+                style={{
+                  fontSize: "0.9rem",
+                  fontWeight: 500,
+                  color: "#facc15",
+                }}
+              >
+                Scheduled next message:{" "}
+                {formatShortDateTime(selectedLead.next_nurture_at)}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* You are here */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          fontSize: "0.75rem",
+          color: "#9ca3af",
+          marginTop: "1rem",
+        }}
+      >
+        <div
+          style={{
+            flex: 1,
+            height: "1px",
+            backgroundColor: "#374151",
+          }}
+        />
+        <span style={{ padding: "0 0.5rem" }}>[ Now you are here ]</span>
+        <div
+          style={{
+            flex: 1,
+            height: "1px",
+            backgroundColor: "#374151",
+          }}
+        />
+      </div>
+
+      {/* Helper text */}
       <p
         style={{
-          marginTop: '0.25rem',
-          fontSize: '0.85rem',
+          marginTop: "0.75rem",
+          fontSize: "0.85rem",
         }}
       >
         Start the conversation by sending a message below.
       </p>
+
+      {/* Quick action chips */}
       <div
-  style={{
-    marginTop: "0.5rem",
-    display: "flex",
-    gap: "0.5rem",
-    flexWrap: "wrap",
-  }}
->
-  <button
-    type="button"
-    style={{
-      padding: "0.35rem 0.75rem",
-      borderRadius: "999px",
-      border: "1px solid #374151",
-      backgroundColor: "rgba(55,65,81,0.4)",
-      fontSize: "0.8rem",
-      cursor: "pointer",
-    }}
-    onClick={() =>
-      setReplyText(
-        "Hi, this is [Your Name] with [Your Brokerage]. I wanted to personally introduce myself and see where you are in your plans to sell."
-      )
-    }
-  >
-    👋 Send Intro
-  </button>
+        style={{
+          marginTop: "0.5rem",
+          display: "flex",
+          gap: "0.5rem",
+          flexWrap: "wrap",
+          justifyContent: "center",
+        }}
+      >
+        <button
+          type="button"
+          style={{
+            padding: "0.35rem 0.75rem",
+            borderRadius: "999px",
+            border: "1px solid #374151",
+            backgroundColor: "rgba(55,65,81,0.4)",
+            fontSize: "0.8rem",
+            cursor: "pointer",
+          }}
+          onClick={() =>
+            setReplyText(
+              "Hi, this is [Your Name] with [Your Brokerage]. I wanted to personally introduce myself and see where you are in your plans to sell."
+            )
+          }
+        >
+          👋 Send Intro
+        </button>
 
-  <button
-    type="button"
-    style={{
-      padding: "0.35rem 0.75rem",
-      borderRadius: "999px",
-      border: "1px solid #374151",
-      backgroundColor: "rgba(55,65,81,0.4)",
-      fontSize: "0.8rem",
-      cursor: "pointer",
-    }}
-    onClick={() =>
-      setReplyText(
-        "Do you have 10–15 minutes this week for a quick call so I can give you a pricing + timing game plan for your home?"
-      )
-    }
-  >
-    📅 Book Call
-  </button>
-</div>
-
+        <button
+          type="button"
+          style={{
+            padding: "0.35rem 0.75rem",
+            borderRadius: "999px",
+            border: "1px solid #374151",
+            backgroundColor: "rgba(55,65,81,0.4)",
+            fontSize: "0.8rem",
+            cursor: "pointer",
+          }}
+          onClick={() =>
+            setReplyText(
+              "Do you have 10–15 minutes this week for a quick call so I can give you a pricing + timing game plan for your home?"
+            )
+          }
+        >
+          📅 Book Call
+        </button>
+      </div>
     </div>
-  ) : (
-    conversation.map((msg: any) => {
-      const isInbound = msg.direction === 'INBOUND';
-
+  </div>
+) : (
+  // NON-EMPTY STATE: simple message list (we can re-style later)
+  <div style={{ padding: "1rem 1.5rem" }}>
+    {conversation.map((msg: MessageRow) => {
+      const isInbound = msg.direction === "INBOUND";
       return (
         <div
           key={msg.id}
           style={{
-            marginBottom: '0.5rem',
-            display: 'flex',
-            justifyContent: isInbound ? 'flex-start' : 'flex-end',
+            marginBottom: "0.75rem",
+            textAlign: isInbound ? "left" : "right",
           }}
         >
           <div
             style={{
-              maxWidth: '80%',
-              padding: '0.5rem 0.75rem',
-              borderRadius: '0.75rem',
-              fontSize: '0.9rem',
-              backgroundColor: isInbound ? '#111827' : '#1f2933',
-              border: '1px solid #374151',
+              fontSize: "0.75rem",
+              color: "#9ca3af",
+              marginBottom: "0.15rem",
             }}
           >
-            <p style={{ margin: 0 }}>{msg.body}</p>
-            <p
-              style={{
-                margin: 0,
-                marginTop: '0.25rem',
-                fontSize: '0.75rem',
-                color: '#9ca3af',
-              }}
-            >
-              {isInbound ? 'From lead' : 'You'} ·{' '}
-              {new Date(msg.created_at).toLocaleString()}
-            </p>
+            {new Date(msg.created_at).toLocaleTimeString("en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </div>
+          <div
+            style={{
+              display: "inline-block",
+              padding: "0.35rem 0.6rem",
+              borderRadius: "0.5rem",
+              backgroundColor: isInbound ? "#111827" : "#1f2937",
+              border: "1px solid #374151",
+              fontSize: "0.85rem",
+            }}
+          >
+            {msg.body}
           </div>
         </div>
       );
-    })
-  )}
-</div>
+    })}
+  </div>
+)}
+
+  ) : (
 
       {/* Reply form */}
       <div
