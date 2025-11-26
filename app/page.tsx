@@ -382,787 +382,706 @@ if (!selectedLead && mappedLeads.length > 0) {
 }, [selectedLead?.id]);
 
 
-  return (
-  <>
-    <Header />
-   
-    <main
-      style={{
-        minHeight: '100vh',
-        maxWidth: '1100px',
-        margin: '0 auto',
-        padding: '2rem 1rem',
-        fontFamily:
-          'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        color: '#f9fafb',
-        backgroundColor: '#020617',
-      }}
-    >
-      <div style={{ marginBottom: "1.75rem" }}>
-  {/* Title */}
-  <h1
-    style={{
-      fontSize: "2rem",
-      fontWeight: 600,
-      marginBottom: "0.25rem",
-      letterSpacing: "-0.5px",
-    }}
-  >
-    Leads Dashboard
-  </h1>
+   return (
+    <>
+      <Header />
 
-  {/* Subtitle */}
-  <p style={{ color: "#b4b4b4", fontSize: "0.95rem", marginBottom: "0.75rem" }}>
-    Your active pipeline
-  </p>
-
-  {/* Stats Row */}
-  <div
-    style={{
-      display: "flex",
-      gap: "1rem",
-      flexWrap: "wrap",
-      fontSize: "0.85rem",
-    }}
-  >
-    <span
-      style={{
-        backgroundColor: "rgba(255, 99, 71, 0.08)",
-        padding: "0.35rem 0.75rem",
-        borderRadius: "0.75rem",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.35rem",
-      }}
-    >
-      🔥 {leads.filter((l) => l.status === "HOT").length} Hot
-    </span>
-
-    <span
-      style={{
-        backgroundColor: "rgba(16, 185, 129, 0.08)",
-        padding: "0.35rem 0.75rem",
-        borderRadius: "0.75rem",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.35rem",
-      }}
-    >
-      🌱 {leads.filter((l) => l.status === "NURTURE").length} Nurture
-    </span>
-
-    <span
-      style={{
-        backgroundColor: "rgba(148, 163, 184, 0.08)",
-        padding: "0.35rem 0.75rem",
-        borderRadius: "0.75rem",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.35rem",
-      }}
-    >
-      📁 {leads.length} Total
-    </span>
-  </div>
-</div>
-
-
-
-      <div className="flex flex-col gap-6 items-stretch lg:flex-row lg:items-start">
-        
-        {/* LEFT COLUMN */}
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '1.5rem',
-          }}
-        >
-          {false && (
-  <>
-    {/* Twilio test block */}
-    <div
-      style={{
-        padding: '1.5rem',
-        borderRadius: '1rem',
-        border: '1px solid #1f2937',
-      }}
-    >
-      <h2 style={{ marginBottom: '0.75rem' }}>Twilio Test</h2>
-
-      <button
-        type="button"
-        disabled={smsLoading}
-        onClick={handleSendTestSms}
-      >
-        {smsLoading ? "Sending…" : "Send Test SMS"}
-      </button>
-
-      {smsMessage && (
-        <p style={{ marginTop: "0.5rem" }}>{smsMessage}</p>
-      )}
-    </div>
-  </>
-)}
-
-   {/* HOT List */}
-<section
-  style={{
-    padding: "1.5rem",
-    borderRadius: "1rem",
-    border: "1px solid #1f2937",
-    marginBottom: "2rem",
-  }}
->
-  <h2 style={{ marginBottom: "0.75rem" }}>Leads to Call Now (HOT)</h2>
-
-  {loadingLeads ? (
-    <p>Loading leads...</p>
-  ) : leads.filter((l) => l.status === "HOT").length === 0 ? (
-    <p>No HOT leads yet.</p>
-  ) : (
-    <ul
-      style={{
-        listStyle: "none",
-        padding: 0,
-        margin: 0,
-      }}
-    >
-      {leads
-        .filter((l) => l.status === "HOT")
-        .sort((a, b) => {
-          const now = Date.now();
-          const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
-
-          const aOverdue =
-            !a.lastContactedAt ||
-            new Date(a.lastContactedAt).getTime() < now - THREE_DAYS;
-          const bOverdue =
-            !b.lastContactedAt ||
-            new Date(b.lastContactedAt).getTime() < now - THREE_DAYS;
-
-          // Overdue first
-          if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
-
-          // Otherwise, oldest contacted first
-          const aTime = a.lastContactedAt
-            ? new Date(a.lastContactedAt).getTime()
-            : 0;
-          const bTime = b.lastContactedAt
-            ? new Date(b.lastContactedAt).getTime()
-            : 0;
-
-          return aTime - bTime;
-        })
-        .map((lead) => {
-          const now = Date.now();
-          const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
-
-          const isOverdue =
-            !lead.lastContactedAt ||
-            new Date(lead.lastContactedAt).getTime() < now - THREE_DAYS;
-
-          return (
-            <li
-              key={lead.id}
-              onClick={() => handleSelectLead(lead)}
-              style={{
-                padding: "0.75rem 1rem",
-                borderRadius: "0.75rem",
-                border: "1px solid #374151",
-                marginBottom: "0.5rem",
-                cursor: "pointer",
-                borderColor:
-                  selectedLead?.id === lead.id ? "#fbbf24" : "#374151",
-                backgroundColor:
-                  selectedLead?.id === lead.id
-                    ? "rgba(251, 191, 36, 0.05)" // selected
-                    : isOverdue
-                    ? "rgba(255, 99, 71, 0.15)" // overdue
-                    : "rgba(15, 23, 42, 0.6)", // normal
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <div>
-                  <strong>{lead.name || "Unnamed lead"}</strong>
-
-                  <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>
-                    {lead.phone}
-                  </div>
-
-                  {lead.email && (
-                    <div style={{ fontSize: "0.8rem", opacity: 0.8 }}>
-                      {lead.email}
-                    </div>
-                  )}
-
-                  <p
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "#9ca3af",
-                      marginTop: "0.25rem",
-                    }}
-                  >
-                    Last contacted:{" "}
-                    {lead.lastContactedAt
-                      ? new Date(
-                          lead.lastContactedAt
-                        ).toLocaleDateString()
-                      : "Never"}
-                  </p>
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                  }}
-                >
-                  <StatusPill status={lead.status} />
-
-                  {isOverdue && (
-                    <span
-                      style={{
-                        fontSize: "0.7rem",
-                        padding: "0.15rem 0.4rem",
-                        borderRadius: "999px",
-                        backgroundColor: "rgba(248, 113, 113, 0.2)",
-                        border: "1px solid rgba(248, 113, 113, 0.7)",
-                        color: "#fecaca",
-                      }}
-                    >
-                      Overdue
-                    </span>
-                  )}
-                </div>
-              </div>
-            </li>
-          );
-        })}
-    </ul>
-  )}
-</section>
-
-          {/* Add Lead form */}
-          <section
-            style={{
-              padding: '1.5rem',
-              borderRadius: '1rem',
-              border: '1px solid #1f2937',
-            }}
-          >
-            <h2 style={{ marginBottom: '0.75rem' }}>Add Lead</h2>
-            <form
-              onSubmit={addLead}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.75rem',
-              }}
-            >
-              <input
-                type="text"
-                placeholder="Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                style={{
-                  padding: '0.5rem',
-                  borderRadius: '0.5rem',
-                  border: '1px solid #374151',
-                }}
-              />
-              <input
-                type="tel"
-                placeholder="Phone"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                required
-                style={{
-                  padding: '0.5rem',
-                  borderRadius: '0.5rem',
-                  border: '1px solid #374151',
-                }}
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                style={{
-                  padding: '0.5rem',
-                  borderRadius: '0.5rem',
-                  border: '1px solid #374151',
-                }}
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                style={{
-                  marginTop: '0.5rem',
-                  padding: '0.5rem 1rem',
-                  borderRadius: '999px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                }}
-              >
-                {loading ? 'Adding…' : 'Add Lead'}
-              </button>
-            </form>
-            {message && (
-              <p style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
-                {message}
-              </p>
-            )}
-          </section>
-        </div>
-
-        {/* RIGHT COLUMN: Conversation view */}
-<aside
-  style={{
-    padding: '1.5rem',
-    borderRadius: '1rem',
-    border: '1px solid #ddd',
-    alignSelf: 'flex-start',
-  }}
->
-  <h2 style={{ marginBottom: '0.75rem' }}>Conversation</h2>
-
-  {!selectedLead ? (
-  <div
-    style={{
-      height: "100%",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      textAlign: "center",
-      padding: "2rem 1.5rem",
-    }}
-  >
-    <div>
-      <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📱</div>
-      <h2
+      <main
         style={{
-          fontSize: "1.3rem",
-          marginBottom: "0.5rem",
-          fontWeight: 600,
+          minHeight: "100vh",
+          maxWidth: "1100px",
+          margin: "0 auto",
+          padding: "2rem 1rem",
+          fontFamily:
+            "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          color: "#f9fafb",
+          backgroundColor: "#020617",
         }}
       >
-        No lead selected
-      </h2>
-      <p
-        style={{
-          color: "#b4b4b4",
-          fontSize: "0.95rem",
-          marginBottom: "0.25rem",
-        }}
-      >
-        Choose a HOT lead on the left to open the conversation.
-      </p>
-      <p style={{ color: "#6b7280", fontSize: "0.85rem" }}>
-        You’ll see all incoming replies and can SMS them from here.
-      </p>
-    </div>
-  </div>
-) : (
-  <div></div>
-)}
-      {/* Lead header */}
-<p style={{ marginBottom: '0.25rem' }}>
-  <strong>{selectedLead?.name}</strong>
-</p>
-
-<p style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
-  📞 {selectedLead?.phone}</p>
-
-<p style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
-  ✉️ {selectedLead?.email}</p>
-
-<div style={{ marginBottom: '0.75rem', fontSize: '0.8rem' }}>
-  <span style={{ color: '#aaa', marginRight: '0.35rem' }}>Status:</span>
-  <StatusPill status={selectedLead?.status} />
-</div>
-
-      {/* Messages list */}
-<div
-  style={{
-    borderRadius: '0.75rem',
-    border: '1px solid #444',
-    padding: '0.75rem 1rem',
-    maxHeight: '260px',
-    overflowY: 'auto',
-    marginBottom: '0.75rem',
-  }}
->
-  {conversation.length === 0 ? (
-  // EMPTY STATE: timeline + next message + chips
-  <div
-    style={{
-      textAlign: "center",
-      padding: "3rem 1rem",
-      opacity: 0.9,
-      color: "#e5e7eb",
-      fontSize: "0.9rem",
-      lineHeight: 1.5,
-    }}
-  >
-    {/* Timeline container */}
-    <div style={{ padding: "0.25rem 0" }}>
-      <div style={{ marginBottom: "1rem" }}>
-        {/* Event 1: Lead captured */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            marginBottom: "0.75rem",
-          }}
-        >
-          {/* Dot + line */}
-          <div
+        {/* Title */}
+        <div style={{ marginBottom: "1.75rem" }}>
+          <h1
             style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              marginRight: "0.75rem",
+              fontSize: "2rem",
+              fontWeight: 600,
+              marginBottom: "0.25rem",
             }}
           >
-            <div
-              style={{
-                width: "0.5rem",
-                height: "0.5rem",
-                borderRadius: "999px",
-                backgroundColor: "#9ca3af",
-              }}
-            />
-            <div
-              style={{
-                flex: 1,
-                width: "1px",
-                backgroundColor: "#374151",
-                marginTop: "0.15rem",
-              }}
-            />
-          </div>
-
-          {/* Text */}
-          <div>
-            <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
-              {selectedLead?.created_at &&
-                new Date(selectedLead.created_at).toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-            </div>
-            <div>
-              Lead captured
-              {selectedLead?.source ? ` from ${selectedLead.source}` : ""}
-            </div>
-          </div>
-        </div>
-
-        {/* Event 2: Added to workflow */}
-        {selectedLead?.nurture_status && (
-          <div
+            Leads Dashboard
+          </h1>
+          <p
             style={{
-              display: "flex",
-              alignItems: "flex-start",
+              color: "#b4b4b4",
+              fontSize: "0.95rem",
               marginBottom: "0.75rem",
             }}
           >
-            {/* Dot + line */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                marginRight: "0.75rem",
-              }}
-            >
-              <div
-                style={{
-                  width: "0.5rem",
-                  height: "0.5rem",
-                  borderRadius: "999px",
-                  backgroundColor: "#9ca3af",
-                }}
-              />
-              <div
-                style={{
-                  flex: 1,
-                  width: "1px",
-                  backgroundColor: "#374151",
-                  marginTop: "0.15rem",
-                }}
-              />
-            </div>
+            Your active pipeline
+          </p>
 
-            {/* Text */}
-            <div>
-              <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
-                Workflow
-              </div>
-              <div>
-                Added to workflow ({selectedLead.nurture_status.toLowerCase()})
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Event 3: Scheduled next message (upcoming) */}
-        {selectedLead?.next_nurture_at && (
+          {/* Stats row */}
           <div
             style={{
               display: "flex",
-              alignItems: "flex-start",
-              marginBottom: "0.75rem",
-            }}
-          >
-            {/* Highlighted dot, no line */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                marginRight: "0.75rem",
-              }}
-            >
-              <div
-                style={{
-                  width: "0.6rem",
-                  height: "0.6rem",
-                  borderRadius: "999px",
-                  backgroundColor: "#facc15",
-                }}
-              />
-            </div>
-
-            {/* Text */}
-            <div>
-              <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
-                Upcoming
-              </div>
-              <div
-                style={{
-                  fontSize: "0.9rem",
-                  fontWeight: 500,
-                  color: "#facc15",
-                }}
-              >
-                Scheduled next message:{" "}
-                {formatShortDateTime(selectedLead.next_nurture_at)}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* You are here */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          fontSize: "0.75rem",
-          color: "#9ca3af",
-          marginTop: "1rem",
-        }}
-      >
-        <div
-          style={{
-            flex: 1,
-            height: "1px",
-            backgroundColor: "#374151",
-          }}
-        />
-        <span style={{ padding: "0 0.5rem" }}>[ Now you are here ]</span>
-        <div
-          style={{
-            flex: 1,
-            height: "1px",
-            backgroundColor: "#374151",
-          }}
-        />
-      </div>
-
-      {/* Helper text */}
-      <p
-        style={{
-          marginTop: "0.75rem",
-          fontSize: "0.85rem",
-        }}
-      >
-        Start the conversation by sending a message below.
-      </p>
-
-      {/* Quick action chips */}
-      <div
-        style={{
-          marginTop: "0.5rem",
-          display: "flex",
-          gap: "0.5rem",
-          flexWrap: "wrap",
-          justifyContent: "center",
-        }}
-      >
-        <button
-          type="button"
-          style={{
-            padding: "0.35rem 0.75rem",
-            borderRadius: "999px",
-            border: "1px solid #374151",
-            backgroundColor: "rgba(55,65,81,0.4)",
-            fontSize: "0.8rem",
-            cursor: "pointer",
-          }}
-          onClick={() =>
-            setReplyText(
-              "Hi, this is [Your Name] with [Your Brokerage]. I wanted to personally introduce myself and see where you are in your plans to sell."
-            )
-          }
-        >
-          👋 Send Intro
-        </button>
-
-        <button
-          type="button"
-          style={{
-            padding: "0.35rem 0.75rem",
-            borderRadius: "999px",
-            border: "1px solid #374151",
-            backgroundColor: "rgba(55,65,81,0.4)",
-            fontSize: "0.8rem",
-            cursor: "pointer",
-          }}
-          onClick={() =>
-            setReplyText(
-              "Do you have 10–15 minutes this week for a quick call so I can give you a pricing + timing game plan for your home?"
-            )
-          }
-        >
-          📅 Book Call
-        </button>
-      </div>
-    </div>
-  </div>
-) : (
-  // NON-EMPTY STATE: simple message list (we can re-style later)
-  <div style={{ padding: "1rem 1.5rem" }}>
-    {conversation.map((msg: MessageRow) => {
-      const isInbound = msg.direction === "INBOUND";
-      return (
-        <div
-          key={msg.id}
-          style={{
-            marginBottom: "0.75rem",
-            textAlign: isInbound ? "left" : "right",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "0.75rem",
-              color: "#9ca3af",
-              marginBottom: "0.15rem",
-            }}
-          >
-            {new Date(msg.created_at).toLocaleTimeString("en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-          </div>
-          <div
-            style={{
-              display: "inline-block",
-              padding: "0.35rem 0.6rem",
-              borderRadius: "0.5rem",
-              backgroundColor: isInbound ? "#111827" : "#1f2937",
-              border: "1px solid #374151",
+              gap: "1rem",
+              flexWrap: "wrap",
               fontSize: "0.85rem",
             }}
           >
-            {msg.body}
+            <span
+              style={{
+                backgroundColor: "rgba(255, 99, 71, 0.08)",
+                padding: "0.35rem 0.75rem",
+                borderRadius: "0.75rem",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+              }}
+            >
+              🔥 {leads.filter((l) => l.status === "HOT").length} Hot
+            </span>
+            <span
+              style={{
+                backgroundColor: "rgba(16, 185, 129, 0.08)",
+                padding: "0.35rem 0.75rem",
+                borderRadius: "0.75rem",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+              }}
+            >
+              🌱 {leads.filter((l) => l.status === "NURTURE").length} Nurture
+            </span>
+            <span
+              style={{
+                backgroundColor: "rgba(148, 163, 184, 0.08)",
+                padding: "0.35rem 0.75rem",
+                borderRadius: "0.75rem",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+              }}
+            >
+              📊 {leads.length} Total
+            </span>
           </div>
         </div>
-      );
-    })}
-  </div>
-)}
 
-  ) : (
+        {/* Main layout */}
+        <div
+          style={{
+            display: "flex",
+            gap: "1.5rem",
+            alignItems: "stretch",
+          }}
+        >
+          {/* LEFT COLUMN */}
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              gap: "1.5rem",
+            }}
+          >
+            {/* HOT List */}
+            <section
+              style={{
+                padding: "1.5rem",
+                borderRadius: "1rem",
+                border: "1px solid #1f2937",
+                marginBottom: "0.5rem",
+              }}
+            >
+              <h2 style={{ marginBottom: "0.75rem" }}>Leads to Call Now (HOT)</h2>
 
-      {/* Reply form */}
-      <div
-        onSubmit={handleSendReply}
-  style={{
-    marginTop: '1rem',
-    display: 'flex',
-    gap: '0.5rem',
-    alignItems: 'center',
-  }}
->
-  <input
-    type="text"
-    placeholder={
-      selectedLead ? 'Type a reply to this lead...' : 'Select a lead to reply...'
-    }
-    value={replyText}
-    onChange={(e) => setReplyText(e.target.value)}
-    disabled={!selectedLead || sendingReply}
-    style={{
-      flex: 1,
-      padding: '0.5rem 0.75rem',
-      borderRadius: '0.75rem',
-      border: '1px solid #555',
-      backgroundColor: '#050016',
-      color: '#fff',
-      fontSize: '0.9rem',
-    }}
-  />
-  <button
-    type="button"
-    onClick={handleSendReply}
-    disabled={
-      !selectedLead || sendingReply || replyText.trim().length === 0
-    }
-    style={{
-      padding: '0.5rem 1rem',
-      borderRadius: '999px',
-      border: 'none',
-      cursor:
-        !selectedLead || sendingReply || replyText.trim().length === 0
-          ? 'not-allowed'
-          : 'pointer',
-      fontSize: '0.9rem',
-      opacity:
-        !selectedLead || sendingReply || replyText.trim().length === 0
-          ? 0.5
-          : 1,
-    }}
-  >
-    {sendingReply ? 'Sending…' : 'Send'}
-  </button>
-</div>
+              {loadingLeads ? (
+                <p>Loading leads...</p>
+              ) : leads.filter((l) => l.status === "HOT").length === 0 ? (
+                <p>No HOT leads yet.</p>
+              ) : (
+                <ul
+                  style={{
+                    listStyle: "none",
+                    padding: 0,
+                    margin: 0,
+                  }}
+                >
+                  {leads
+                    .filter((l) => l.status === "HOT")
+                    .map((lead) => {
+                      const isSelected = selectedLead?.id === lead.id;
+                      return (
+                        <li
+                          key={lead.id}
+                          onClick={() => handleSelectLead(lead)}
+                          style={{
+                            padding: "0.75rem 1rem",
+                            borderRadius: "0.75rem",
+                            border: "1px solid #374151",
+                            marginBottom: "0.5rem",
+                            cursor: "pointer",
+                            backgroundColor: isSelected
+                              ? "rgba(251, 191, 36, 0.05)"
+                              : "rgba(15, 23, 42, 0.6)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
+                          >
+                            <div>
+                              <strong>{lead.name || "Unnamed lead"}</strong>
+                              <div
+                                style={{
+                                  fontSize: "0.85rem",
+                                  opacity: 0.9,
+                                }}
+                              >
+                                {lead.phone}
+                              </div>
+                              {lead.email && (
+                                <div
+                                  style={{
+                                    fontSize: "0.8rem",
+                                    opacity: 0.8,
+                                  }}
+                                >
+                                  {lead.email}
+                                </div>
+                              )}
+                            </div>
+                            <StatusPill status={lead.status} />
+                          </div>
+                        </li>
+                      );
+                    })}
+                </ul>
+              )}
+            </section>
 
-      <p
-        style={{
-          fontSize: '0.8rem',
-          color: '#555',
-          margin: 0,
-        }}
-      >
-        Replies here send an SMS to this lead and are logged in the conversation
-        above.
-       </p>
-     </aside>
-    </div>
-   </main>
+            {/* Add Lead form */}
+            <section
+              style={{
+                padding: "1.5rem",
+                borderRadius: "1rem",
+                border: "1px solid #1f2937",
+              }}
+            >
+              <h2 style={{ marginBottom: "0.75rem" }}>Add Lead</h2>
+              <form onSubmit={addLead}>
+                <div style={{ marginBottom: "0.75rem" }}>
+                  <input
+                    type="text"
+                    placeholder="Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "0.6rem 0.75rem",
+                      borderRadius: "0.75rem",
+                      border: "1px solid #374151",
+                      backgroundColor: "rgba(15, 23, 42, 0.9)",
+                      color: "#f9fafb",
+                    }}
+                  />
+                </div>
+                <div style={{ marginBottom: "0.75rem" }}>
+                  <input
+                    type="text"
+                    placeholder="Phone"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "0.6rem 0.75rem",
+                      borderRadius: "0.75rem",
+                      border: "1px solid #374151",
+                      backgroundColor: "rgba(15, 23, 42, 0.9)",
+                      color: "#f9fafb",
+                    }}
+                  />
+                </div>
+                <div style={{ marginBottom: "0.75rem" }}>
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "0.6rem 0.75rem",
+                      borderRadius: "0.75rem",
+                      border: "1px solid #374151",
+                      backgroundColor: "rgba(15, 23, 42, 0.9)",
+                      color: "#f9fafb",
+                    }}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    width: "100%",
+                    padding: "0.6rem 0.75rem",
+                    borderRadius: "0.75rem",
+                    border: "1px solid #374151",
+                    backgroundColor: loading
+                      ? "rgba(55, 65, 81, 0.6)"
+                      : "rgba(37, 99, 235, 0.9)",
+                    fontSize: "0.9rem",
+                    cursor: loading ? "default" : "pointer",
+                  }}
+                >
+                  {loading ? "Adding..." : "Add Lead"}
+                </button>
+
+                {message && (
+                  <p
+                    style={{
+                      marginTop: "0.5rem",
+                      fontSize: "0.8rem",
+                      color: "#9ca3af",
+                    }}
+                  >
+                    {message}
+                  </p>
+                )}
+              </form>
+            </section>
+          </div>
+
+          {/* RIGHT COLUMN: Conversation */}
+          <aside
+            style={{
+              flex: 1.2,
+              borderRadius: "1rem",
+              border: "1px solid #1f2937",
+              padding: "1.5rem",
+            }}
+          >
+            {/* Lead header */}
+            <p style={{ marginBottom: "0.25rem" }}>
+              <strong>{selectedLead?.name || "No lead selected"}</strong>
+            </p>
+            <p
+              style={{
+                marginBottom: "0.25rem",
+                fontSize: "0.9rem",
+              }}
+            >
+              📞 {selectedLead?.phone || "Select a lead from the left"}
+            </p>
+            <p
+              style={{
+                marginBottom: "0.75rem",
+                fontSize: "0.9rem",
+              }}
+            >
+              📧 {selectedLead?.email || " "}
+            </p>
+            <div style={{ marginBottom: "0.75rem" }}>
+              <span style={{ color: "#aaa", marginRight: "0.5rem" }}>
+                Status:
+              </span>
+              <StatusPill status={selectedLead?.status || null} />
+            </div>
+
+            {/* Messages list */}
+            <div
+              style={{
+                borderRadius: "0.75rem",
+                border: "1px solid #444",
+                padding: "0.75rem 1rem",
+                maxHeight: "260px",
+                overflowY: "auto",
+                marginBottom: "0.75rem",
+              }}
+            >
+              {conversation.length === 0 ? (
+                // EMPTY STATE: timeline + next message + chips
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "2.5rem 0.5rem",
+                    opacity: 0.9,
+                    color: "#e5e7eb",
+                    fontSize: "0.9rem",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <div style={{ padding: "0.25rem 0" }}>
+                    <div style={{ marginBottom: "1rem" }}>
+                      {/* Event 1: Lead captured */}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          marginBottom: "0.75rem",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            marginRight: "0.75rem",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: "0.5rem",
+                              height: "0.5rem",
+                              borderRadius: "999px",
+                              backgroundColor: "#9ca3af",
+                            }}
+                          />
+                          <div
+                            style={{
+                              flex: 1,
+                              width: "1px",
+                              backgroundColor: "#374151",
+                              marginTop: "0.15rem",
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <div
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "#9ca3af",
+                            }}
+                          >
+                            {selectedLead?.created_at &&
+                              new Date(
+                                selectedLead.created_at as any
+                              ).toLocaleTimeString("en-US", {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                          </div>
+                          <div>
+                            Lead captured
+                            {selectedLead?.source
+                              ? ` from ${selectedLead.source}`
+                              : ""}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Event 2: Added to workflow */}
+                      {selectedLead?.nurture_status && (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            marginBottom: "0.75rem",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              marginRight: "0.75rem",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: "0.5rem",
+                                height: "0.5rem",
+                                borderRadius: "999px",
+                                backgroundColor: "#9ca3af",
+                              }}
+                            />
+                            <div
+                              style={{
+                                flex: 1,
+                                width: "1px",
+                                backgroundColor: "#374151",
+                                marginTop: "0.15rem",
+                              }}
+                            />
+                          </div>
+
+                          <div>
+                            <div
+                              style={{
+                                fontSize: "0.75rem",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              Workflow
+                            </div>
+                            <div>
+                              Added to workflow (
+                              {selectedLead.nurture_status.toLowerCase()})
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Event 3: Scheduled next message */}
+                      {selectedLead?.next_nurture_at && (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            marginBottom: "0.75rem",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              marginRight: "0.75rem",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: "0.6rem",
+                                height: "0.6rem",
+                                borderRadius: "999px",
+                                backgroundColor: "#facc15",
+                              }}
+                            />
+                          </div>
+
+                          <div>
+                            <div
+                              style={{
+                                fontSize: "0.75rem",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              Upcoming
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "0.9rem",
+                                fontWeight: 500,
+                                color: "#facc15",
+                              }}
+                            >
+                              Scheduled next message:{" "}
+                              {formatShortDateTime(
+                                selectedLead.next_nurture_at
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* You are here */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        fontSize: "0.75rem",
+                        color: "#9ca3af",
+                        marginTop: "1rem",
+                      }}
+                    >
+                      <div
+                        style={{
+                          flex: 1,
+                          height: "1px",
+                          backgroundColor: "#374151",
+                        }}
+                      />
+                      <span style={{ padding: "0 0.5rem" }}>
+                        [ Now you are here ]
+                      </span>
+                      <div
+                        style={{
+                          flex: 1,
+                          height: "1px",
+                          backgroundColor: "#374151",
+                        }}
+                      />
+                    </div>
+
+                    <p
+                      style={{
+                        marginTop: "0.75rem",
+                        fontSize: "0.85rem",
+                      }}
+                    >
+                      Start the conversation by sending a message below.
+                    </p>
+
+                    {/* Quick chips */}
+                    <div
+                      style={{
+                        marginTop: "0.5rem",
+                        display: "flex",
+                        gap: "0.5rem",
+                        flexWrap: "wrap",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        style={{
+                          padding: "0.35rem 0.75rem",
+                          borderRadius: "999px",
+                          border: "1px solid #374151",
+                          backgroundColor: "rgba(55,65,81,0.4)",
+                          fontSize: "0.8rem",
+                          cursor: "pointer",
+                        }}
+                        onClick={() =>
+                          setReplyText(
+                            "Hi, this is [Your Name] with [Your Brokerage]. I wanted to personally introduce myself and see where you are in your plans to sell."
+                          )
+                        }
+                      >
+                        👋 Send Intro
+                      </button>
+
+                      <button
+                        type="button"
+                        style={{
+                          padding: "0.35rem 0.75rem",
+                          borderRadius: "999px",
+                          border: "1px solid #374151",
+                          backgroundColor: "rgba(55,65,81,0.4)",
+                          fontSize: "0.8rem",
+                          cursor: "pointer",
+                        }}
+                        onClick={() =>
+                          setReplyText(
+                            "Do you have 10–15 minutes this week for a quick call so I can give you a pricing + timing game plan for your home?"
+                          )
+                        }
+                      >
+                        📅 Book Call
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                // NON-EMPTY: render messages
+                <div style={{ padding: "0.25rem 0" }}>
+                  {conversation.map((msg: MessageRow) => {
+                    const isInbound = msg.direction === "INBOUND";
+                    return (
+                      <div
+                        key={msg.id}
+                        style={{
+                          marginBottom: "0.75rem",
+                          textAlign: isInbound ? "left" : "right",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "0.75rem",
+                            color: "#9ca3af",
+                            marginBottom: "0.15rem",
+                          }}
+                        >
+                          {new Date(msg.created_at).toLocaleTimeString(
+                            "en-US",
+                            {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            }
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            display: "inline-block",
+                            padding: "0.35rem 0.6rem",
+                            borderRadius: "0.5rem",
+                            backgroundColor: isInbound
+                              ? "#111827"
+                              : "#1f2937",
+                            border: "1px solid #374151",
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          {msg.body}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Reply form */}
+            <div>
+              <form
+                onSubmit={handleSendReply}
+                style={{
+                  display: "flex",
+                  gap: "0.5rem",
+                  alignItems: "center",
+                  marginTop: "0.5rem",
+                }}
+              >
+                <input
+                  type="text"
+                  placeholder="Type a reply to this lead..."
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  style={{
+                    flex: 1,
+                    padding: "0.6rem 0.75rem",
+                    borderRadius: "999px",
+                    border: "1px solid #374151",
+                    backgroundColor: "rgba(15,23,42,0.9)",
+                    color: "#f9fafb",
+                    fontSize: "0.9rem",
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={!selectedLead || sendingReply || !replyText.trim()}
+                  style={{
+                    padding: "0.55rem 1rem",
+                    borderRadius: "999px",
+                    border: "1px solid #374151",
+                    backgroundColor: sendingReply
+                      ? "rgba(55,65,81,0.7)"
+                      : "rgba(59,130,246,0.9)",
+                    fontSize: "0.9rem",
+                    opacity:
+                      !selectedLead || sendingReply || !replyText.trim()
+                        ? 0.5
+                        : 1,
+                    cursor:
+                      !selectedLead || sendingReply || !replyText.trim()
+                        ? "default"
+                        : "pointer",
+                  }}
+                >
+                  {sendingReply ? "Sending…" : "Send"}
+                </button>
+              </form>
+
+              <p
+                style={{
+                  fontSize: "0.8rem",
+                  color: "#555",
+                  margin: 0,
+                  marginTop: "0.25rem",
+                }}
+              >
+                Replies here send an SMS to this lead and are logged in the
+                conversation above.
+              </p>
+            </div>
+          </aside>
+        </div>
+      </main>
+    </>
   );
- }
+}
