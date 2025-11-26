@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 
 type Lead = {
   id: string;
-  created_at: string; // timestamptz comes back as string
+  created_at?: string | null; 
   name: string;
   phone: string;
   email: string;
