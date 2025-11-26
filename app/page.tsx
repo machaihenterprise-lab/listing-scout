@@ -487,120 +487,126 @@ if (!selectedLead && mappedLeads.length > 0) {
   </>
 )}
 
-          {/* HOT List */}
-          <section
-            style={{
-              padding: '1.5rem',
-              borderRadius: '1rem',
-              border: '1px solid #1f2937',
-              marginBottom: '2rem',
-            }}
-          >
-            <h2 style={{ marginBottom: '0.75rem' }}>Leads to Call Now (HOT)</h2>
-
-            {loadingLeads ? (
-              <p>Loading leads...</p>
-            ) : leads.length === 0 ? (
-              <p>No HOT leads yet.</p>
-            ) : (
-              <ul
-  style={{
-    listStyle: "none",
-    padding: 0,
-    margin: 0,
+    {/* HOT List */}
+    <section
+    style={{
+    padding: "1.5rem",
+    borderRadius: "1rem",
+    border: "1px solid #1f2937",
+    marginBottom: "1.5rem",
   }}
 >
-  {leads.filter((l) => l.status === "HOT").length === 0 ? (
-    <li
+  <h2 style={{ marginBottom: "0.75rem" }}>Leads to Call Now (HOT)</h2>
+
+  {loadingLeads ? (
+    <p>Loading leads...</p>
+  ) : leads.filter((l) => l.status === "HOT").length === 0 ? (
+    <p>No HOT leads right now.</p>
+  ) : (
+    <ul
       style={{
-        padding: "1rem 0.75rem",
-        borderRadius: "0.75rem",
-        fontSize: "0.9rem",
-        color: "#b4b4b4",
+        listStyle: "none",
+        padding: 0,
+        margin: 0,
       }}
     >
-      No hot leads right now.
-      <br />
-      <span style={{ fontSize: "0.8rem", opacity: 0.9 }}>
-        When someone replies with intent to talk, they’ll appear here.
-      </span>
-    </li>
-  ) : (
-   <ul>
-  {leads
-    .filter((l) => l.status === "HOT")
-    .map((lead) => {
-      const isOverdue =
-        !lead.lastContactedAt ||
-        new Date().getTime() - new Date(lead.lastContactedAt).getTime() >
-          7 * 24 * 60 * 60 * 1000; // 3 days
+      {leads
+        .filter((l) => l.status === "HOT")
+        .sort((a, b) => {
+          const now = Date.now();
+          const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
 
-      return (
-        <li
-          key={lead.id}
-          onClick={() => handleSelectLead(lead)}
-          style={{
-            padding: "0.75rem 1rem",
-            borderRadius: "0.75rem",
-            border: "1px solid #374151",
-            marginBottom: "0.5rem",
-            cursor: "pointer",
-            borderColor:
-              selectedLead?.id === lead.id ? "#fbbf24" : "#374151",
-            backgroundColor:
-              selectedLead?.id === lead.id
-                ? "rgba(251, 191, 36, 0.05)" // currently selected lead
-                : isOverdue
-                ? "rgba(255, 99, 71, 0.15)" // 🔴 subtle overdue highlight
-                : "rgba(15, 23, 42, 0.6)", // normal state
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <div>
-              <strong>{lead.name || "Unnamed lead"}</strong>
+          const aOverdue =
+            !a.lastContactedAt ||
+            new Date(a.lastContactedAt).getTime() < now - THREE_DAYS;
+          const bOverdue =
+            !b.lastContactedAt ||
+            new Date(b.lastContactedAt).getTime() < now - THREE_DAYS;
 
-              <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>
-                {lead.phone}
-              </div>
+          // Overdue first
+          if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
 
-              {lead.email && (
-                <div style={{ fontSize: "0.8rem", opacity: 0.8 }}>
-                  {lead.email}
-                </div>
-              )}
+          // Otherwise, oldest contacted first
+          const aTime = a.lastContactedAt
+            ? new Date(a.lastContactedAt).getTime()
+            : 0;
+          const bTime = b.lastContactedAt
+            ? new Date(b.lastContactedAt).getTime()
+            : 0;
 
-              <p
+          return aTime - bTime;
+        })
+        .map((lead) => {
+          const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
+          const isOverdue =
+            !lead.lastContactedAt ||
+            new Date(lead.lastContactedAt).getTime() <
+              Date.now() - THREE_DAYS;
+
+          return (
+            <li
+              key={lead.id}
+              onClick={() => handleSelectLead(lead)}
+              style={{
+                padding: "0.75rem 1rem",
+                borderRadius: "0.75rem",
+                border: "1px solid #374151",
+                marginBottom: "0.5rem",
+                cursor: "pointer",
+                borderColor:
+                  selectedLead?.id === lead.id ? "#fbbf24" : "#374151",
+                backgroundColor:
+                  selectedLead?.id === lead.id
+                    ? "rgba(251, 191, 36, 0.05)" // currently selected
+                    : isOverdue
+                    ? "rgba(255, 99, 71, 0.15)" // overdue glow
+                    : "rgba(15, 23, 42, 0.6)", // normal
+              }}
+            >
+              <div
                 style={{
-                  fontSize: "0.75rem",
-                  color: "#9ca3af",
-                  marginTop: "0.25rem",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
                 }}
               >
-                Last contacted:{" "}
-                {lead.lastContactedAt
-                  ? new Date(
-                      lead.lastContactedAt
-                    ).toLocaleDateString()
-                  : "Never"}
-              </p>
-            </div>
+                <div>
+                  <strong>{lead.name || "Unnamed lead"}</strong>
 
-            <StatusPill status={lead.status} />
-          </div>
-        </li>
-      );
-    })}
-</ul>
+                  <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>
+                    {lead.phone}
+                  </div>
+
+                  {lead.email && (
+                    <div style={{ fontSize: "0.8rem", opacity: 0.8 }}>
+                      {lead.email}
+                    </div>
+                  )}
+
+                  <p
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "#9ca3af",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    Last contacted:{" "}
+                    {lead.lastContactedAt
+                      ? new Date(
+                          lead.lastContactedAt
+                        ).toLocaleDateString()
+                      : "Never"}
+                  </p>
+                </div>
+
+                <StatusPill status={lead.status} />
+              </div>
+            </li>
+          );
+        })}
+    </ul>
   )}
-</ul>
-            )}
-          </section>
+</section>
 
           {/* Add Lead form */}
           <section
