@@ -224,25 +224,27 @@ export default function Home() {
   }, [selectedLead]);
 
   const fetchMessages = useCallback(
-    async (leadId: string) => {
-      if (!leadId) return;
+  async (leadId: string) => {
+    console.log("[fetchMessages] for lead", leadId);
 
-      const { data, error } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("lead_id", leadId)
-        .order("created_at", { ascending: true });
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .order("created_at", { ascending: true });
 
-      if (error) {
-        console.error("Error loading messages:", error);
-        setMessage(`Error loading messages: ${error.message}`);
-        return;
-      }
+    console.log("[fetchMessages] result", { error, data });
 
-      setConversation((data || []) as MessageRow[]);
-    },
-    []
-  );
+    if (error) {
+      console.error("Error loading messages:", error);
+      setMessage(`Error loading messages: ${error.message}`);
+      return;
+    }
+
+    // TEMP: show all messages while we confirm schema
+    setConversation((data || []) as MessageRow[]);
+  },
+  []
+);
 
   /* ------------------------------------------------------------------ */
   /* Actions                                                            */
@@ -772,7 +774,7 @@ export default function Home() {
     padding: "0.75rem 1rem",
     maxHeight: "260px",
     overflowY: "auto",
-    marginBottom: "0.5rem", // was 0.75rem
+    marginBottom: "0.75rem",
   }}
 >
   {conversation.length === 0 ? (
