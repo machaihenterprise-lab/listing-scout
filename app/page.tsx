@@ -725,89 +725,324 @@ export default function Home() {
               {automationPaused ? "⏸ Automation Paused" : "🟢 Automation Active"}
             </button>
 
-            {/* Messages list / empty state (unchanged) */}
-            {/* ... keeping your existing conversation + timeline UI exactly ... */}
-
-            {/* For brevity here: you can keep the entire conversation JSX block
-                you already have. I haven't changed its logic, only the data
-                plumbing above. */}
-            {/* --- START of your original conversation JSX --- */}
+            <div
+  style={{
+    borderRadius: "0.75rem",
+    border: "1px solid #444",
+    padding: "0.75rem 1rem",
+    maxHeight: "260px",
+    overflowY: "auto",
+    marginBottom: "0.75rem",
+  }}
+>
+  {conversation.length === 0 ? (
+    // EMPTY: timeline + “now you are here” + chips
+    <div
+      style={{
+        textAlign: "center",
+        padding: "2.5rem 0.5rem",
+        opacity: 0.9,
+        color: "#e5e7eb",
+        fontSize: "0.9rem",
+        lineHeight: 1.5,
+      }}
+    >
+      <div style={{ padding: "0.25rem 0" }}>
+        <div style={{ marginBottom: "1rem" }}>
+          {/* Event 1 – Lead captured */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              marginBottom: "0.75rem",
+            }}
+          >
             <div
               style={{
-                borderRadius: "0.75rem",
-                border: "1px solid #444",
-                padding: "0.75rem 1rem",
-                maxHeight: "260px",
-                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                marginRight: "0.75rem",
+              }}
+            >
+              <div
+                style={{
+                  width: "0.5rem",
+                  height: "0.5rem",
+                  borderRadius: "999px",
+                  backgroundColor: "#9ca3af",
+                }}
+              />
+              <div
+                style={{
+                  flex: 1,
+                  width: "1px",
+                  backgroundColor: "#374151",
+                  marginTop: "0.15rem",
+                }}
+              />
+            </div>
+
+            <div style={{ textAlign: "left" }}>
+              <div
+                style={{
+                  fontSize: "0.75rem",
+                  color: "#9ca3af",
+                }}
+              >
+                {selectedLead?.created_at &&
+                  new Date(
+                    selectedLead.created_at as any
+                  ).toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+              </div>
+              <div>
+                Lead captured
+                {selectedLead?.source
+                  ? ` from ${selectedLead.source}`
+                  : ""}
+              </div>
+            </div>
+          </div>
+
+          {/* Event 2 – Added to workflow */}
+          {selectedLead?.nurture_status && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
                 marginBottom: "0.75rem",
               }}
             >
-              {conversation.length === 0 ? (
-                /* EMPTY state (timeline) */
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  marginRight: "0.75rem",
+                }}
+              >
                 <div
                   style={{
-                    textAlign: "center",
-                    padding: "2.5rem 0.5rem",
-                    opacity: 0.9,
-                    color: "#e5e7eb",
-                    fontSize: "0.9rem",
-                    lineHeight: 1.5,
+                    width: "0.5rem",
+                    height: "0.5rem",
+                    borderRadius: "999px",
+                    backgroundColor: "#9ca3af",
+                  }}
+                />
+                <div
+                  style={{
+                    flex: 1,
+                    width: "1px",
+                    backgroundColor: "#374151",
+                    marginTop: "0.15rem",
+                  }}
+                />
+              </div>
+
+              <div style={{ textAlign: "left" }}>
+                <div
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "#9ca3af",
                   }}
                 >
-                  {/* ... your existing empty-state timeline JSX ... */}
-                  {/* (You can keep exactly what you had here.) */}
-                  {/* I haven't edited this section for logic. */}
+                  Workflow
                 </div>
-              ) : (
-                /* NON-EMPTY: show actual messages */
-                <div style={{ padding: "0.25rem 0" }}>
-                  {conversation.map((msg: MessageRow) => {
-                    const isInbound = msg.direction === "INBOUND";
-
-                    return (
-                      <div
-                        key={msg.id}
-                        style={{
-                          marginBottom: "0.75rem",
-                          textAlign: isInbound ? "left" : "right",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: "0.75rem",
-                            color: "#9ca3af",
-                            marginBottom: "0.15rem",
-                          }}
-                        >
-                          {new Date(msg.created_at).toLocaleTimeString(
-                            "en-US",
-                            {
-                              hour: "numeric",
-                              minute: "2-digit",
-                            }
-                          )}
-                        </div>
-
-                        <div
-                          style={{
-                            display: "inline-block",
-                            padding: "0.35rem 0.6rem",
-                            borderRadius: "0.5rem",
-                            backgroundColor: isInbound
-                              ? "#111827"
-                              : "#1f2937",
-                            border: "1px solid #374151",
-                            fontSize: "0.85rem",
-                          }}
-                        >
-                          {msg.body}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div>
+                  Added to workflow (
+                  {selectedLead.nurture_status.toLowerCase()})
                 </div>
-              )}
+              </div>
             </div>
+          )}
+
+          {/* Event 3 – Scheduled next message */}
+          {selectedLead?.next_nurture_at && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                marginBottom: "0.75rem",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  marginRight: "0.75rem",
+                }}
+              >
+                <div
+                  style={{
+                    width: "0.6rem",
+                    height: "0.6rem",
+                    borderRadius: "999px",
+                    backgroundColor: "#facc15",
+                  }}
+                />
+              </div>
+
+              <div style={{ textAlign: "left" }}>
+                <div
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "#9ca3af",
+                  }}
+                >
+                  Upcoming
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.9rem",
+                    fontWeight: 500,
+                    color: "#facc15",
+                  }}
+                >
+                  Scheduled next message:{" "}
+                  {formatShortDateTime(selectedLead.next_nurture_at)}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Now you are here */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            fontSize: "0.75rem",
+            color: "#9ca3af",
+            marginTop: "1rem",
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              height: "1px",
+              backgroundColor: "#374151",
+            }}
+          />
+          <span style={{ padding: "0 0.5rem" }}>
+            [ Now you are here ]
+          </span>
+          <div
+            style={{
+              flex: 1,
+              height: "1px",
+              backgroundColor: "#374151",
+            }}
+          />
+        </div>
+
+        <p
+          style={{
+            marginTop: "0.75rem",
+            fontSize: "0.85rem",
+          }}
+        >
+          Start the conversation by sending a message below.
+        </p>
+
+        {/* Quick action chips */}
+        <div
+          style={{
+            marginTop: "0.5rem",
+            display: "flex",
+            gap: "0.5rem",
+            flexWrap: "wrap",
+            justifyContent: "center",
+          }}
+        >
+          <button
+            type="button"
+            style={{
+              padding: "0.35rem 0.75rem",
+              borderRadius: "999px",
+              border: "1px solid #374151",
+              backgroundColor: "rgba(55,65,81,0.4)",
+              fontSize: "0.8rem",
+              cursor: "pointer",
+            }}
+            onClick={() =>
+              setReplyText(
+                "Hi, this is [Your Name] with [Your Brokerage]. I wanted to personally introduce myself and see where you are in your plans to sell."
+              )
+            }
+          >
+            👋 Send Intro
+          </button>
+
+          <button
+            type="button"
+            style={{
+              padding: "0.35rem 0.75rem",
+              borderRadius: "999px",
+              border: "1px solid #374151",
+              backgroundColor: "rgba(55,65,81,0.4)",
+              fontSize: "0.8rem",
+              cursor: "pointer",
+            }}
+            onClick={() =>
+              setReplyText(
+                "Do you have 10–15 minutes this week for a quick call so I can give you a pricing + timing game plan for your home?"
+              )
+            }
+          >
+            📅 Book Call
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : (
+    // NON-EMPTY: show actual messages
+    <div style={{ padding: "0.25rem 0" }}>
+      {conversation.map((msg: MessageRow) => {
+        const isInbound = msg.direction === "INBOUND";
+
+        return (
+          <div
+            key={msg.id}
+            style={{
+              marginBottom: "0.75rem",
+              textAlign: isInbound ? "left" : "right",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "0.75rem",
+                color: "#9ca3af",
+                marginBottom: "0.15rem",
+              }}
+            >
+              {new Date(msg.created_at).toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </div>
+
+            <div
+              style={{
+                display: "inline-block",
+                padding: "0.35rem 0.6rem",
+                borderRadius: "0.5rem",
+                backgroundColor: isInbound ? "#111827" : "#1f2937",
+                border: "1px solid #374151",
+                fontSize: "0.85rem",
+                }}
+            >
+              {msg.body}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  )}
+</div> 
             {/* --- END conversation block --- */}
 
             {/* Reply form */}
