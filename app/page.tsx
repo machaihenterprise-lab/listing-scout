@@ -372,6 +372,10 @@ if (!selectedLead && mappedLeads.length > 0) {
   // If no lead is selected yet, don't start polling
   if (!selectedLead) return;
 
+  useEffect(() => {
+  setAutomationPaused(false);
+  }, [selectedLead?.id]);
+
 
   // Load messages immediately when a lead is selected
   fetchMessages(selectedLead.id);
