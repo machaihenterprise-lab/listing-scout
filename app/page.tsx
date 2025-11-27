@@ -371,13 +371,7 @@ if (!selectedLead && mappedLeads.length > 0) {
   useEffect(() => {
   // If no lead is selected yet, don't start polling
   if (!selectedLead) return;
-
-  useEffect(() => {
-  // For now, reset when switching leads.
-  // Later we’ll sync this to a Supabase column instead.
-  setAutomationPaused(false);
-}, [selectedLead?.id]);
-
+  
 
   // Load messages immediately when a lead is selected
   fetchMessages(selectedLead.id);
