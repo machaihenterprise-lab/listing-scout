@@ -772,7 +772,7 @@ export default function Home() {
     padding: "0.75rem 1rem",
     maxHeight: "260px",
     overflowY: "auto",
-    marginBottom: "0.75rem",
+    marginBottom: "0.5rem", // was 0.75rem
   }}
 >
   {conversation.length === 0 ? (
