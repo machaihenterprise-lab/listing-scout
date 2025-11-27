@@ -310,12 +310,16 @@ export default function Home() {
   };
 
   const addLead = async (e: FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage(null);
+  e.preventDefault();
+  setLoading(true);
+  setMessage(null);
 
-    try {
-      const { error } = await supabase.from("leads").insert({
+  console.log("[addLead] submitting", { name, phone, email });
+
+  try {
+    const { data, error } = await supabase
+      .from("leads")
+      .insert({
         name,
         phone,
         email,
@@ -324,23 +328,36 @@ export default function Home() {
         nurture_status: "ACTIVE",
         nurture_stage: "DAY_1",
         next_nurture_at: new Date().toISOString(),
-      });
+      })
+      .select(); // ask Supabase to return the row so we know it worked
 
-      if (error) throw error;
+    console.log("[addLead] Supabase response", { data, error });
 
-      setName("");
-      setPhone("");
-      setEmail("");
-      setMessage("Lead added successfully.");
-
-      await fetchLeads();
-    } catch (err: any) {
-      console.error("Error adding lead:", err);
-      setMessage(`Error adding lead: ${err.message || "Unknown error"}`);
-    } finally {
-      setLoading(false);
+    if (error) {
+      // This is the IMPORTANT part — show the actual supabase error
+      setMessage(`Supabase insert error: ${error.message}`);
+      return;
     }
-  };
+
+    setName("");
+    setPhone("");
+    setEmail("");
+    setMessage("Lead added successfully.");
+
+    await fetchLeads();
+  } catch (err: any) {
+    console.error("[addLead] Network / unknown error", err);
+    // This is where "TypeError: Failed to fetch" will show if it’s truly network
+    setMessage(
+      `Network or unknown error adding lead: ${
+        err?.message || "Unknown error"
+      }`
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const sendTestSms = async () => {
     try {
