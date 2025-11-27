@@ -680,72 +680,35 @@ if (!selectedLead && mappedLeads.length > 0) {
               padding: "1.5rem",
             }}
           >
-          {/* Lead header + control */}
-         <div
-           style={{
-             display: "flex",
-             justifyContent: "space-between",
-             alignItems: "flex-start",
-             gap: "1rem",
-             marginBottom: "0.75rem",
-           }}
-         >
-           {/* Left: identity */}
-           <div>
-             <p style={{ marginBottom: "0.25rem" }}>
-               <strong>{selectedLead?.name || "No lead selected"}</strong>
-             </p>
+            {/* Lead header */}
+            <p style={{ marginBottom: "0.25rem" }}>
+              <strong>{selectedLead?.name || "No lead selected"}</strong>
+            </p>
 
-             <p
-               style={{
-                 marginBottom: "0.25rem",
-                 fontSize: "0.9rem",
-               }}
-             >
-               📞 {selectedLead?.phone || "Select a lead from the left"}
-             </p>
+            <p
+              style={{
+                marginBottom: "0.25rem",
+                fontSize: "0.9rem",
+              }}
+            >
+              📞 {selectedLead?.phone || "Select a lead from the left"}
+            </p>
 
-             <p
-               style={{
-                 marginBottom: "0.25rem",
-                 fontSize: "0.9rem",
-               }}
-             >
-               📧 {selectedLead?.email || ""}
-             </p>
+            <p
+              style={{
+                marginBottom: "0.75rem",
+                fontSize: "0.9rem",
+              }}
+            >
+              📧 {selectedLead?.email || ""}
+            </p>
 
-             <div>
-               <span style={{ color: "#aaa", marginRight: "0.5rem" }}>
-                 Status:
-               </span>
-               <StatusPill status={selectedLead?.status || null} />
-             </div>
-           </div>
-
-           {/* Right: automation control */}
-           <button
-             type="button"
-             onClick={() => setAutomationPaused((prev) => !prev)}
-             disabled={!selectedLead}
-             style={{
-               fontSize: "0.75rem",
-               padding: "0.35rem 0.75rem",
-               borderRadius: "999px",
-               border: "1px solid #374151",
-               backgroundColor: automationPaused
-                 ? "rgba(239, 68, 68, 0.15)" // red-ish when paused
-                 : "rgba(16, 185, 129, 0.15)", // green-ish when active
-               color: automationPaused ? "#fecaca" : "#6ee7b7",
-               cursor: !selectedLead ? "default" : "pointer",
-               opacity: !selectedLead ? 0.4 : 1,
-               whiteSpace: "nowrap",
-             }}
-           >
-             {automationPaused ? "⏸ Automation Paused" : "🟢 Automation Active"}
-           </button>
-         </div>
-
-         {/* Messages list */}
+            <div style={{ marginBottom: "0.75rem" }}>
+              <span style={{ color: "#aaa", marginRight: "0.5rem" }}>
+                Status:
+              </span>
+              <StatusPill status={selectedLead?.status || null} />
+            </div>
 
             {/* Messages list / empty state */}
             <div
