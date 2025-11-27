@@ -371,7 +371,7 @@ if (!selectedLead && mappedLeads.length > 0) {
   useEffect(() => {
   // If no lead is selected yet, don't start polling
   if (!selectedLead) return;
-  
+
 
   // Load messages immediately when a lead is selected
   fetchMessages(selectedLead.id);
@@ -679,30 +679,34 @@ if (!selectedLead && mappedLeads.length > 0) {
               <strong>{selectedLead?.name || "No lead selected"}</strong>
             </p>
 
-            <p
-              style={{
-                marginBottom: "0.25rem",
-                fontSize: "0.9rem",
-              }}
-            >
-              📞 {selectedLead?.phone || "Select a lead from the left"}
-            </p>
-
-            <p
-              style={{
-                marginBottom: "0.75rem",
-                fontSize: "0.9rem",
-              }}
-            >
-              📧 {selectedLead?.email || ""}
-            </p>
-
             <div style={{ marginBottom: "0.75rem" }}>
               <span style={{ color: "#aaa", marginRight: "0.5rem" }}>
                 Status:
-              </span>
-              <StatusPill status={selectedLead?.status || null} />
-            </div>
+             </span>
+             <StatusPill status={selectedLead?.status || null} />
+           </div>
+
+            <button
+              type="button"
+              onClick={() => setAutomationPaused((prev) => !prev)}
+              disabled={!selectedLead}
+              style={{
+               fontSize: "0.75rem",
+               padding: "0.35rem 0.75rem",
+               borderRadius: "999px",
+               border: "1px solid #374151",
+               backgroundColor: automationPaused
+                 ? "rgba(239, 68, 68, 0.15)" // red-ish when paused
+                 : "rgba(16, 185, 129, 0.15)", // green-ish when active
+               color: automationPaused ? "#fecaca" : "#6ee7b7",
+               cursor: !selectedLead ? "default" : "pointer",
+               opacity: !selectedLead ? 0.4 : 1,
+               marginBottom: "0.75rem",
+             }}
+          >
+               {automationPaused ? "⏸ Automation Paused" : "🟢 Automation Active"}
+             </button>
+
 
             {/* Messages list / empty state */}
             <div
