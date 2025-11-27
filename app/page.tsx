@@ -257,49 +257,49 @@ export default function Home() {
   };
 
   const handleSendReply = async () => {
-    if (!selectedLead) {
-      setMessage("Please select a lead first.");
+  if (!selectedLead) {
+    setMessage("Please select a lead first.");
+    return;
+  }
+
+  const trimmed = replyText.trim();
+  if (!trimmed) return;
+
+  try {
+    setSendingReply(true);
+    setMessage(null);
+
+    const res = await fetch("/api/reply-sms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        leadId: selectedLead.id,
+        to: selectedLead.phone,
+        body: trimmed,
+      }),
+    });
+
+    // Update last_contacted_at
+    await supabase
+      .from("leads")
+      .update({ last_contacted_at: new Date().toISOString() })
+      .eq("id", selectedLead.id);
+
+    // Refresh leads so "Last contacted" etc stay in sync
+    await fetchLeads();
+
+    const data = await res.json().catch(() => ({} as any));
+
+    if (!res.ok) {
+      console.error("reply-sms API returned error", res.status, data);
+      setMessage(
+        data?.error ||
+          `Error sending reply (status ${res.status}). Check server logs.`
+      );
       return;
     }
 
-    const trimmed = replyText.trim();
-    if (!trimmed) return;
-
-    try {
-      setSendingReply(true);
-      setMessage(null);
-
-      const res = await fetch("/api/reply-sms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leadId: selectedLead.id,
-          to: selectedLead.phone,
-          body: trimmed,
-        }),
-      });
-
-      // Update last_contacted_at
-      await supabase
-        .from("leads")
-        .update({ last_contacted_at: new Date().toISOString() })
-        .eq("id", selectedLead.id);
-
-      // Refresh leads so UI reflects updated last-contacted info
-      await fetchLeads();
-
-      const data = await res.json().catch(() => ({} as any));
-
-      if (!res.ok) {
-        console.error("reply-sms API returned error", res.status, data);
-        setMessage(
-          data?.error ||
-            `Error sending reply (status ${res.status}). Check server logs.`
-        );
-        return;
-      }
-
-      // ✅ Local echo so the message shows instantly
+    // ✅ LOCAL ECHO: show the new message immediately in the UI
     const nowIso = new Date().toISOString();
     setConversation((prev) => [
       ...prev,
@@ -313,20 +313,20 @@ export default function Home() {
       } as MessageRow,
     ]);
 
-      setReplyText("");
+    // Clear input
+    setReplyText("");
 
-     // Optional: you can keep this if you want to resync from DB;
-     // if you start seeing duplicates, comment it out and rely on polling.
-     // await fetchMessages(selectedLead.id);
-
-      await fetchMessages(selectedLead.id);
-    } catch (err: any) {
-      console.error("Error sending reply:", err);
-      setMessage(err?.message || "Error sending reply");
-    } finally {
-      setSendingReply(false);
-    }
-  };
+    // ❌ IMPORTANT: DO NOT call fetchMessages here.
+    // The 5s polling effect will pick up the DB row when it exists.
+    // If we call fetchMessages immediately and the DB isn’t updated yet,
+    // we wipe out the locally-added message.
+  } catch (err: any) {
+    console.error("Error sending reply:", err);
+    setMessage(err?.message || "Error sending reply");
+  } finally {
+    setSendingReply(false);
+  }
+};
 
   const addLead = async (e: FormEvent) => {
   e.preventDefault();
