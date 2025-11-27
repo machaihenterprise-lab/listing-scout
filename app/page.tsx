@@ -299,7 +299,26 @@ export default function Home() {
         return;
       }
 
+      // ✅ Local echo so the message shows instantly
+    const nowIso = new Date().toISOString();
+    setConversation((prev) => [
+      ...prev,
+      {
+        id: `local-${nowIso}`, // temporary local id
+        lead_id: selectedLead.id,
+        direction: "OUTBOUND",
+        channel: "sms",
+        body: trimmed,
+        created_at: nowIso,
+      } as MessageRow,
+    ]);
+
       setReplyText("");
+
+     // Optional: you can keep this if you want to resync from DB;
+     // if you start seeing duplicates, comment it out and rely on polling.
+     // await fetchMessages(selectedLead.id);
+
       await fetchMessages(selectedLead.id);
     } catch (err: any) {
       console.error("Error sending reply:", err);
@@ -701,14 +720,18 @@ export default function Home() {
           </div>
 
           {/* RIGHT COLUMN – Conversation */}
-          <aside
-            style={{
-              flex: 1.2,
-              borderRadius: "1rem",
-              border: "1px solid #1f2937",
-              padding: "1.5rem",
-            }}
-          >
+          
+            <aside
+              style={{
+                flex: 1.2,
+                borderRadius: "1rem",
+               border: "1px solid #1f2937",
+               padding: "1rem 1.5rem 1.5rem", // less top padding
+               display: "flex",
+               flexDirection: "column",
+             }}
+            >
+
             {/* Lead header */}
             <p style={{ marginBottom: "0.25rem" }}>
               <strong>{selectedLead?.name || "No lead selected"}</strong>
@@ -1144,7 +1167,7 @@ export default function Home() {
                   opacity: smsLoading ? 0.6 : 1,
                 }}
               >
-                {smsLoading ? "Sending test SMS…" : "Send Test SMS"}
+                {smsLoading ? "Sending SMS…" : "Send SMS"}
               </button>
               {smsMessage && (
                 <span style={{ marginLeft: "0.5rem", color: "#9ca3af" }}>
