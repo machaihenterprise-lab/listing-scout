@@ -1,117 +1,96 @@
-import { NextResponse } from 'next/server';
-import twilio from 'twilio';
-import { supabase } from '../../../lib/supabaseClient';
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-if (!accountSid || !authToken || !fromNumber) {
-  console.warn(
-    'Twilio env vars missing. ' +
-      'TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PHONE_NUMBER must be set.'
-  );
-}
-
-const twilioClient =
-  accountSid && authToken ? twilio(accountSid, authToken) : null;
+// Supabase server client (service role so we can write messages)
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function POST(req: Request) {
   try {
-    const bodyJson = await req.json().catch((err) => {
-      console.error('Error parsing JSON in /api/reply-sms:', err);
-      return null;
-    });
-
-    if (!bodyJson) {
-      return NextResponse.json(
-        { error: 'Invalid JSON payload' },
-        { status: 400 }
-      );
-    }
-
-    const { leadId, to, body } = bodyJson as {
-      leadId?: string;
-      to?: string;
-      body?: string;
-    };
+    const { leadId, to, body } = await req.json();
 
     if (!leadId || !to || !body) {
       return NextResponse.json(
-        { error: 'Missing required fields (leadId, to, body)' },
+        { error: "Missing leadId, to, or body" },
         { status: 400 }
       );
     }
 
-    if (!twilioClient || !fromNumber) {
-      console.error('Twilio client not configured correctly.');
+    const apiKey = process.env.TELNYX_API_KEY;
+    const profileId = process.env.TELNYX_MESSAGING_PROFILE_ID;
+    const fromNumber = process.env.TELNYX_US_NUMBER; // TODO: later choose US/CA based on lead
+
+    if (!apiKey || !profileId || !fromNumber) {
       return NextResponse.json(
-        { error: 'Server SMS configuration error' },
+        { error: "Telnyx environment variables are not set" },
         { status: 500 }
       );
     }
 
-    // 1) Send SMS via Twilio
-    let twilioSid: string | null = null;
-    try {
-      const twilioMsg = await twilioClient.messages.create({
-        to,
+    // 1) Send SMS via Telnyx API
+    const telnyxRes = await fetch("https://api.telnyx.com/v2/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
         from: fromNumber,
-        body,
-      });
-      twilioSid = twilioMsg.sid;
-    } catch (err: any) {
-      console.error('Twilio send error in /api/reply-sms:', err);
+        to,
+        text: body,
+        messaging_profile_id: profileId,
+      }),
+    });
+
+    const telnyxJson = await telnyxRes.json().catch(() => ({}));
+
+    if (!telnyxRes.ok) {
+      console.error("Telnyx error:", telnyxRes.status, telnyxJson);
       return NextResponse.json(
-        { error: err?.message || 'Twilio failed to send SMS' },
+        {
+          error:
+            telnyxJson?.errors?.[0]?.detail ||
+            `Failed to send SMS via Telnyx (status ${telnyxRes.status})`,
+        },
         { status: 500 }
       );
     }
 
-    // 2) Try to log OUTBOUND SMS into Supabase messages table
-    //    but DO NOT fail the whole request if logging breaks.
-    let logged = true;
-    let logError: string | null = null;
+    // 2) Log outbound message in Supabase
+    const { error: insertError } = await supabase.from("messages").insert({
+      lead_id: leadId,
+      direction: "OUTBOUND",
+      channel: "SMS",
+      body,
+      is_auto: false,
+    });
 
-    try {
-      const { error: insertError } = await supabase.from('messages').insert({
-        lead_id: leadId,
-        direction: 'OUTBOUND',
-        channel: 'SMS',
-        body,
-      });
-
-      if (insertError) {
-        logged = false;
-        logError = insertError.message || String(insertError);
-        console.error(
-          'Error inserting outbound message into Supabase:',
-          insertError
-        );
-      }
-    } catch (err: any) {
-      logged = false;
-      logError = err?.message || String(err);
-      console.error(
-        'Unexpected error inserting outbound message into Supabase:',
-        err
+    if (insertError) {
+      console.error("Supabase insert error:", insertError);
+      // We still return success to client since SMS was sent,
+      // but we tell you logging failed.
+      return NextResponse.json(
+        {
+          warning: "SMS sent but logging to Supabase failed",
+          supabaseError: insertError.message,
+        },
+        { status: 200 }
       );
     }
 
-    // Even if logging failed, SMS was sent successfully.
     return NextResponse.json(
       {
         success: true,
-        twilioSid,
-        logged,
-        logError,
+        telnyxMessageId: telnyxJson?.data?.id ?? null,
       },
       { status: 200 }
     );
   } catch (err: any) {
-    console.error('Unexpected error in /api/reply-sms route:', err);
+    console.error("Unexpected /api/reply-sms error:", err);
     return NextResponse.json(
-      { error: err?.message || 'Unexpected server error in reply-sms' },
+      { error: err?.message || "Unexpected server error" },
       { status: 500 }
     );
   }
