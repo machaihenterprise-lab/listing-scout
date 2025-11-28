@@ -1,47 +1,69 @@
+
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useState } from "react";
 
 export default function SellerOptInPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [consent, setConsent] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
-
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitting(true);
 
-  const trimmedPhone = phone.trim();
-  if (!trimmedPhone) {
-  setError("Please enter your mobile phone number.");
-  return;
-}
+    const trimmedName = name.trim();
+    const trimmedPhone = phone.trim();
 
-  if (!consent) {
-  setError("Please check the box to agree to receive SMS messages.");
-  return;
-}
+    if (!trimmedName) {
+      setError("Please enter your full name.");
+      setMessage(null);
+      return;
+    }
 
-  setError(null);
-  setMessage(null);
-  setLoading(true);
+    if (!trimmedPhone) {
+      setError("Please enter your mobile phone number.");
+      setMessage(null);
+      return;
+    }
 
+    if (!consent) {
+      setError("Please check the box to agree to receive SMS messages.");
+      setMessage(null);
+      return;
+    }
 
-    // For Telnyx approval we ONLY need the UI + text.
-    // You can later replace this with a call to your Supabase API
-    // to actually store the lead.
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    setError(null);
+    setMessage(null);
+    setLoading(true);
 
-    setSubmitting(false);
-    setSubmitted(true);
+    try {
+      // TODO: plug into Supabase or an API route if you want to store these.
+      // For now we just simulate a successful submit.
+      await new Promise((resolve) => setTimeout(resolve, 700));
+
+      setMessage(
+        "Thanks! An agent from FlowEase Studio (Listing Scout) will follow up shortly."
+      );
+      setName("");
+      setEmail("");
+      setPhone("");
+      setConsent(false);
+    } catch (err: any) {
+      console.error("Opt-in submit error:", err);
+      setError(
+        err?.message || "Something went wrong while submitting the form."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const buttonDisabled =
+    loading || !name.trim() || !phone.trim() || !consent;
 
   return (
     <main
@@ -50,38 +72,40 @@ export default function SellerOptInPage() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "#020617",
+        padding: "2rem 1rem",
+        background:
+          "radial-gradient(circle at top, #0f172a 0, #020617 50%, #000 100%)",
         color: "#f9fafb",
         fontFamily:
           "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-        padding: "2rem 1rem",
       }}
     >
       <div
         style={{
           width: "100%",
-          maxWidth: "480px",
-          backgroundColor: "#020617",
-          borderRadius: "1rem",
-          border: "1px solid #1f2937",
-          padding: "1.75rem",
-          boxShadow: "0 20px 40px rgba(0,0,0,0.45)",
+          maxWidth: "520px",
+          borderRadius: "1.5rem",
+          border: "1px solid rgba(148,163,184,0.25)",
+          background:
+            "radial-gradient(circle at top left, rgba(59,130,246,0.25), transparent 45%), rgba(15,23,42,0.96)",
+          padding: "2.25rem 2rem",
+          boxShadow: "0 24px 60px rgba(15,23,42,0.7)",
         }}
       >
         <h1
           style={{
-            fontSize: "1.5rem",
+            fontSize: "1.6rem",
             fontWeight: 600,
-            marginBottom: "0.25rem",
+            marginBottom: "0.5rem",
           }}
         >
           Get Your Home Selling Game Plan
         </h1>
         <p
           style={{
-            fontSize: "0.9rem",
-            color: "#9ca3af",
-            marginBottom: "1.25rem",
+            fontSize: "0.95rem",
+            color: "#d1d5db",
+            marginBottom: "1.5rem",
           }}
         >
           Share a few details below and an agent from{" "}
@@ -89,150 +113,141 @@ export default function SellerOptInPage() {
           pricing, timing, and strategy for your property.
         </p>
 
-        {submitted ? (
-          <div
+        <form onSubmit={handleSubmit}>
+          {/* Name */}
+          <div style={{ marginBottom: "0.75rem" }}>
+            <label
+              style={{
+                display: "block",
+                fontSize: "0.8rem",
+                marginBottom: "0.3rem",
+                color: "#e5e7eb",
+              }}
+            >
+              Full name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Jane Doe"
+              style={{
+                width: "100%",
+                padding: "0.75rem 0.9rem",
+                borderRadius: "0.9rem",
+                border: "1px solid #374151",
+                backgroundColor: "rgba(15,23,42,0.95)",
+                color: "#f9fafb",
+                fontSize: "0.9rem",
+              }}
+            />
+          </div>
+
+          {/* Email (optional) */}
+          <div style={{ marginBottom: "0.75rem" }}>
+            <label
+              style={{
+                display: "block",
+                fontSize: "0.8rem",
+                marginBottom: "0.3rem",
+                color: "#9ca3af",
+              }}
+            >
+              Email (optional)
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              style={{
+                width: "100%",
+                padding: "0.75rem 0.9rem",
+                borderRadius: "0.9rem",
+                border: "1px solid #374151",
+                backgroundColor: "rgba(15,23,42,0.95)",
+                color: "#f9fafb",
+                fontSize: "0.9rem",
+              }}
+            />
+          </div>
+
+          {/* Phone */}
+          <div style={{ marginBottom: "0.75rem" }}>
+            <label
+              style={{
+                display: "block",
+                fontSize: "0.8rem",
+                marginBottom: "0.3rem",
+                color: "#e5e7eb",
+              }}
+            >
+              Mobile phone number
+            </label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+1 555 123 4567"
+              style={{
+                width: "100%",
+                padding: "0.75rem 0.9rem",
+                borderRadius: "0.9rem",
+                border: "1px solid #374151",
+                backgroundColor: "rgba(15,23,42,0.95)",
+                color: "#f9fafb",
+                fontSize: "0.9rem",
+              }}
+            />
+          </div>
+
+          {/* Checkbox consent */}
+          <label
             style={{
-              padding: "0.85rem 1rem",
-              borderRadius: "0.75rem",
-              backgroundColor: "rgba(22, 163, 74, 0.12)",
-              border: "1px solid rgba(22, 163, 74, 0.35)",
-              fontSize: "0.9rem",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "0.5rem",
+              fontSize: "0.8rem",
+              lineHeight: 1.4,
+              marginTop: "0.75rem",
+              color: "#e5e7eb",
             }}
           >
-            ✅ Thank you! We&apos;ve received your request. An agent will reach
-            out by SMS shortly.
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: "0.75rem" }}>
-              <label
-                htmlFor="name"
-                style={{
-                  display: "block",
-                  fontSize: "0.8rem",
-                  marginBottom: "0.25rem",
-                }}
-              >
-                Full name
-              </label>
-              <input
-                id="name"
-                name="name"
-                type="text"
-                required
-                style={{
-                  width: "100%",
-                  padding: "0.6rem 0.75rem",
-                  borderRadius: "0.75rem",
-                  border: "1px solid #374151",
-                  backgroundColor: "rgba(15, 23, 42, 0.9)",
-                  color: "#f9fafb",
-                  fontSize: "0.9rem",
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: "0.75rem" }}>
-              <label
-                htmlFor="email"
-                style={{
-                  display: "block",
-                  fontSize: "0.8rem",
-                  marginBottom: "0.25rem",
-                }}
-              >
-                Email (optional)
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                style={{
-                  width: "100%",
-                  padding: "0.6rem 0.75rem",
-                  borderRadius: "0.75rem",
-                  border: "1px solid #374151",
-                  backgroundColor: "rgba(15, 23, 42, 0.9)",
-                  color: "#f9fafb",
-                  fontSize: "0.9rem",
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: "0.5rem" }}>
-              <label
-                htmlFor="phone"
-                style={{
-                  display: "block",
-                  fontSize: "0.8rem",
-                  marginBottom: "0.25rem",
-                }}
-              >
-                Mobile phone number
-              </label>
-              <input
-                id="phone"
-                name="phone"
-                type="tel"
-                required
-                placeholder="+1 555 123 4567"
-                style={{
-                  width: "100%",
-                  padding: "0.6rem 0.75rem",
-                  borderRadius: "0.75rem",
-                  border: "1px solid #374151",
-                  backgroundColor: "rgba(15, 23, 42, 0.9)",
-                  color: "#f9fafb",
-                  fontSize: "0.9rem",
-                }}
-              />
-            </div>
-
-                  <label
-                 style={{
-                 display: "flex",
-                 alignItems: "flex-start",
-                 gap: "0.5rem",
-                 fontSize: "0.8rem",
-                 lineHeight: 1.4,
-                 marginTop: "0.75rem",
-             }}
-           >
-        <input
+            <input
               type="checkbox"
               checked={consent}
               onChange={(e) => setConsent(e.target.checked)}
-              style={{ marginTop: "0.15rem" }}
-          />
-        <span>
-              I agree to receive SMS messages about selling my home and related real
-              estate updates from <strong>FlowEase Studio (Listing Scout)</strong>.
-              Message &amp; data rates may apply. Message frequency varies. Reply{" "}
-             <strong>STOP</strong> to unsubscribe, <strong>HELP</strong> for help.
-        </span>
-      </label>
-
-
-             {/* Telnyx / carrier-friendly consent text */}
-            <p
-              style={{
-                fontSize: "0.75rem",
-                color: "#9ca3af",
-                lineHeight: 1.5,
-                marginBottom: "0.9rem",
-              }}
-            >
-              By submitting this form, you agree to receive SMS messages about
-              selling your home and real estate updates from{" "}
-              <strong>FlowEase Studio (Listing Scout)</strong>. Message and data
-              rates may apply. Message frequency varies. Reply{" "}
-              <strong>STOP</strong> to unsubscribe or <strong>HELP</strong> for
+              style={{ marginTop: "0.2rem" }}
+            />
+            <span>
+              I agree to receive SMS messages about selling my home and related
+              real estate updates from{" "}
+              <strong>FlowEase Studio (Listing Scout)</strong>. Message &amp;
+              data rates may apply. Message frequency varies. Reply{" "}
+              <strong>STOP</strong> to unsubscribe, <strong>HELP</strong> for
               help.
-            </p>
+            </span>
+          </label>
 
-                      <button
+          {/* Extra explicit text (matches what Telnyx wants) */}
+          <p
+            style={{
+              marginTop: "0.55rem",
+              fontSize: "0.75rem",
+              color: "#9ca3af",
+              lineHeight: 1.4,
+            }}
+          >
+            By submitting this form, you agree to receive SMS messages about
+            selling your home and real estate updates from FlowEase Studio
+            (Listing Scout). Message and data rates may apply. Message frequency
+            varies. Reply STOP to unsubscribe or HELP for help.
+          </p>
+
+          {/* Submit */}
+          <button
             type="submit"
-            disabled={loading || !name.trim() || !phone.trim() || !consent}
+            disabled={buttonDisabled}
             style={{
               marginTop: "1rem",
               width: "100%",
@@ -243,17 +258,14 @@ export default function SellerOptInPage() {
                 "linear-gradient(135deg, rgba(59,130,246,1), rgba(37,99,235,1))",
               fontSize: "0.9rem",
               fontWeight: 500,
-              cursor:
-                loading || !name.trim() || !phone.trim() || !consent
-                  ? "default"
-                  : "pointer",
-              opacity:
-                loading || !name.trim() || !phone.trim() || !consent ? 0.6 : 1,
+              cursor: buttonDisabled ? "default" : "pointer",
+              opacity: buttonDisabled ? 0.6 : 1,
             }}
           >
             {loading ? "Submitting..." : "Get my selling game plan"}
           </button>
 
+          {/* Error / success */}
           {error && (
             <p
               style={{
@@ -287,10 +299,9 @@ export default function SellerOptInPage() {
           >
             FlowEase Studio (Listing Scout) • Real estate seller lead follow-up
             and consultation. You can unsubscribe anytime by replying STOP.
-            </p>
-        </form> 
-        )}
-        </div>
-        </main>
-    );
-    }
+          </p>
+        </form>
+      </div>
+    </main>
+  );
+}
