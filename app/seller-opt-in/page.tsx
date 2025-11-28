@@ -3,12 +3,36 @@
 import { FormEvent, useState } from "react";
 
 export default function SellerOptInPage() {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+
+  const trimmedPhone = phone.trim();
+  if (!trimmedPhone) {
+  setError("Please enter your mobile phone number.");
+  return;
+}
+
+  if (!consent) {
+  setError("Please check the box to agree to receive SMS messages.");
+  return;
+}
+
+  setError(null);
+  setMessage(null);
+  setLoading(true);
+
 
     // For Telnyx approval we ONLY need the UI + text.
     // You can later replace this with a call to your Supabase API
@@ -164,7 +188,32 @@ export default function SellerOptInPage() {
               />
             </div>
 
-            {/* Telnyx / carrier-friendly consent text */}
+                  <label
+                 style={{
+                 display: "flex",
+                 alignItems: "flex-start",
+                 gap: "0.5rem",
+                 fontSize: "0.8rem",
+                 lineHeight: 1.4,
+                 marginTop: "0.75rem",
+             }}
+           >
+        <input
+              type="checkbox"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              style={{ marginTop: "0.15rem" }}
+          />
+        <span>
+              I agree to receive SMS messages about selling my home and related real
+              estate updates from <strong>FlowEase Studio (Listing Scout)</strong>.
+              Message &amp; data rates may apply. Message frequency varies. Reply{" "}
+             <strong>STOP</strong> to unsubscribe, <strong>HELP</strong> for help.
+        </span>
+      </label>
+
+
+             {/* Telnyx / carrier-friendly consent text */}
             <p
               style={{
                 fontSize: "0.75rem",
@@ -181,39 +230,67 @@ export default function SellerOptInPage() {
               help.
             </p>
 
-            <button
-              type="submit"
-              disabled={submitting}
+                      <button
+            type="submit"
+            disabled={loading || !name.trim() || !phone.trim() || !consent}
+            style={{
+              marginTop: "1rem",
+              width: "100%",
+              padding: "0.8rem 1rem",
+              borderRadius: "999px",
+              border: "none",
+              background:
+                "linear-gradient(135deg, rgba(59,130,246,1), rgba(37,99,235,1))",
+              fontSize: "0.9rem",
+              fontWeight: 500,
+              cursor:
+                loading || !name.trim() || !phone.trim() || !consent
+                  ? "default"
+                  : "pointer",
+              opacity:
+                loading || !name.trim() || !phone.trim() || !consent ? 0.6 : 1,
+            }}
+          >
+            {loading ? "Submitting..." : "Get my selling game plan"}
+          </button>
+
+          {error && (
+            <p
               style={{
-                width: "100%",
-                padding: "0.65rem 0.75rem",
-                borderRadius: "999px",
-                border: "1px solid #2563eb",
-                backgroundColor: submitting
-                  ? "rgba(37, 99, 235, 0.5)"
-                  : "rgba(37, 99, 235, 0.95)",
-                color: "#f9fafb",
-                fontSize: "0.95rem",
-                fontWeight: 500,
-                cursor: submitting ? "default" : "pointer",
+                marginTop: "0.5rem",
+                fontSize: "0.8rem",
+                color: "#f87171",
               }}
             >
-              {submitting ? "Submitting…" : "Get my selling game plan"}
-            </button>
-          </form>
-        )}
+              {error}
+            </p>
+          )}
 
-        <p
-          style={{
-            marginTop: "1rem",
-            fontSize: "0.7rem",
-            color: "#6b7280",
-          }}
-        >
-          FlowEase Studio (Listing Scout) • Real estate seller lead follow-up
-          and consultation. You can unsubscribe anytime by replying STOP.
-        </p>
-      </div>
-    </main>
-  );
-}
+          {message && (
+            <p
+              style={{
+                marginTop: "0.5rem",
+                fontSize: "0.8rem",
+                color: "#6ee7b7",
+              }}
+            >
+              {message}
+            </p>
+          )}
+
+          <p
+            style={{
+              marginTop: "1rem",
+              fontSize: "0.7rem",
+              color: "#6b7280",
+            }}
+          >
+            FlowEase Studio (Listing Scout) • Real estate seller lead follow-up
+            and consultation. You can unsubscribe anytime by replying STOP.
+            </p>
+        </form> 
+        )}
+        </div>
+        </main>
+    );
+    }
