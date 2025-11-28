@@ -721,53 +721,75 @@ export default function Home() {
             </section>
           </div>
 
-          {/* RIGHT COLUMN – Conversation */}
-          
-            <aside
-              style={{
-                flex: 1.2,
-                borderRadius: "1rem",
-               border: "1px solid #1f2937",
-               padding: "1rem 1.5rem 1.5rem", // less top padding
-               display: "flex",
-               flexDirection: "column",
-             }}
-            >
+     {/* RIGHT COLUMN – Conversation */}
+    <aside
+      style={{
+      flex: 1.2,
+      borderRadius: "1rem",
+      border: "1px solid #1f2937",
+      padding: "1.25rem 1.5rem 1.5rem",
+      display: "flex",
+      flexDirection: "column",
+      gap: "0.75rem",
+    }}
+  >
+   {/* Lead header row */}
+  <div
+      style={{
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: "1rem",
+    }}
+  >
+    <div>
+      <p
+        style={{
+          margin: 0,
+          fontSize: "1rem",
+          fontWeight: 600,
+        }}
+      >
+        {selectedLead?.name || "No lead selected"}
+      </p>
 
-            {/* Lead header */}
-            <p style={{ marginBottom: "0.25rem" }}>
-              <strong>{selectedLead?.name || "No lead selected"}</strong>
-            </p>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          marginTop: "0.25rem",
+        }}
+      >
+        <span style={{ color: "#aaa", fontSize: "0.8rem" }}>Status:</span>
+        <StatusPill status={selectedLead?.status || null} />
+      </div>
+    </div>
 
-            <div style={{ marginBottom: "0.75rem" }}>
-              <span style={{ color: "#aaa", marginRight: "0.5rem" }}>
-                Status:
-              </span>
-              <StatusPill status={selectedLead?.status || null} />
-            </div>
+    <button
+      type="button"
+      onClick={() => setAutomationPaused((prev) => !prev)}
+      disabled={!selectedLead}
+      style={{
+        fontSize: "0.75rem",
+        padding: "0.35rem 0.75rem",
+        borderRadius: "999px",
+        border: "1px solid #374151",
+        backgroundColor: automationPaused
+          ? "rgba(239, 68, 68, 0.15)"
+          : "rgba(16, 185, 129, 0.15)",
+        color: automationPaused ? "#fecaca" : "#6ee7b7",
+        cursor: !selectedLead ? "default" : "pointer",
+        opacity: !selectedLead ? 0.4 : 1,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {automationPaused ? "⏸ Automation Paused" : "🟢 Automation Active"}
+    </button>
+  </div>
 
-            <button
-              type="button"
-              onClick={() => setAutomationPaused((prev) => !prev)}
-              disabled={!selectedLead}
-              style={{
-                fontSize: "0.75rem",
-                padding: "0.35rem 0.75rem",
-                borderRadius: "999px",
-                border: "1px solid #374151",
-                backgroundColor: automationPaused
-                  ? "rgba(239, 68, 68, 0.15)"
-                  : "rgba(16, 185, 129, 0.15)",
-                color: automationPaused ? "#fecaca" : "#6ee7b7",
-                cursor: !selectedLead ? "default" : "pointer",
-                opacity: !selectedLead ? 0.4 : 1,
-                marginBottom: "0.75rem",
-              }}
-            >
-              {automationPaused ? "⏸ Automation Paused" : "🟢 Automation Active"}
-            </button>
-
-            <div
+  {/* ⬇️ keep your existing messages container + reply form right after this div */}
+  <div
   style={{
     borderRadius: "0.75rem",
     border: "1px solid #444",
