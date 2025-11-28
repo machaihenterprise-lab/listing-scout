@@ -1162,7 +1162,7 @@ export default function Home() {
                 </button>
               </form>
 
-              <p
+                            <p
                 style={{
                   fontSize: "0.8rem",
                   color: "#555",
@@ -1173,28 +1173,6 @@ export default function Home() {
                 Replies here send an SMS to this lead and are logged in the
                 conversation above.
               </p>
-            </div>
-
-            {/* Optional: Test SMS button + status */}
-            <div style={{ marginTop: "1rem", fontSize: "0.8rem" }}>
-              <button
-                style={{
-                  padding: "0.4rem 0.9rem",
-                  borderRadius: "999px",
-                  border: "1px solid #374151",
-                  backgroundColor: "rgba(37, 99, 235, 0.9)",
-                  fontSize: "0.8rem",
-                  cursor: smsLoading ? "default" : "pointer",
-                  opacity: smsLoading ? 0.6 : 1,
-                }}
-              >
-                {smsLoading ? "Sending SMS…" : "Send SMS"}
-              </button>
-              {smsMessage && (
-                <span style={{ marginLeft: "0.5rem", color: "#9ca3af" }}>
-                  {smsMessage}
-                </span>
-              )}
             </div>
           </aside>
         </div>
@@ -1215,4 +1193,3 @@ export default function Home() {
     </>
   );
 }
-
