@@ -229,6 +229,15 @@ export default function SellerOptInPage() {
             </span>
           </label>
 
+             <p style={{ fontSize: "0.75rem", color: "#aaa", marginTop: "0.5rem" }}>
+             Your mobile information will not be shared or sold to third parties for marketing or promotional purposes.
+           </p>
+
+             <p style={{ fontSize: "0.75rem", color: "#aaa" }}>
+             View our <a href="https://www.notion.so" target="_blank" style={{ color: "#66aaff" }}>Privacy Policy</a>.
+          </p>
+
+
           {/* Extra explicit text (matches what Telnyx wants) */}
           <p
             style={{
