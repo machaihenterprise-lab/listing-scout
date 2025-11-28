@@ -1,36 +1,44 @@
 'use client';
 
-import { useEffect, useState, FormEvent } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import React, {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+import { supabase } from "../lib/supabaseClient";
 
 type Lead = {
   id: string;
-  created_at?: string | null; 
+  created_at?: string | null;
   name: string;
   phone: string;
   email: string;
   source: string | null;
   status: string | null;
 
-  // New nurture fields (all optional so TS doesn’t complain)
   nurture_status?: string | null;
   nurture_stage?: string | null;
-  next_nurture_at?: string | null;      // timestamptz comes back as string
+  next_nurture_at?: string | null;
   last_nurture_sent_at?: string | null;
   last_agent_sent_at?: string | null;
   nurture_locked_until?: string | null;
-  lastContactedAt?: string | null; // ISO timestamp or null
-};
 
+  lastContactedAt?: string | null; // mapped from last_contacted_at
+};
 
 type MessageRow = {
   id: string;
   lead_id: string;
-  direction: 'INBOUND' | 'OUTBOUND';
+  direction: "INBOUND" | "OUTBOUND";
   channel: string | null;
   body: string;
   created_at: string;
 };
+
+/* ------------------------------------------------------------------ */
+/* Header + small helpers                                             */
+/* ------------------------------------------------------------------ */
 
 function Header() {
   return (
@@ -50,23 +58,20 @@ function Header() {
         zIndex: 50,
       }}
     >
-      {/* Logo / Title */}
-      <h2 style={{ fontSize: "1.5rem", fontWeight: 600 }}>
-        Listing Scout
-      </h2>
+      <h2 style={{ fontSize: "1.5rem", fontWeight: 600 }}>Listing Scout</h2>
 
-      {/* Desktop Navigation */}
-     <nav
-      className="hidden lg:flex"
-      style={{ gap: '1.5rem' }}
-    >
-     <a href="#" style={{ opacity: 0.8 }}>Leads</a>
-     <a href="#" style={{ opacity: 0.8 }}>Settings</a>
-     <a href="#" style={{ opacity: 0.8 }}>Account</a>
-     </nav>
+      <nav className="hidden lg:flex" style={{ gap: "1.5rem" }}>
+        <a href="#" style={{ opacity: 0.8 }}>
+          Leads
+        </a>
+        <a href="#" style={{ opacity: 0.8 }}>
+          Settings
+        </a>
+        <a href="#" style={{ opacity: 0.8 }}>
+          Account
+        </a>
+      </nav>
 
-
-      {/* Mobile Menu Icon */}
       <div className="lg:hidden">
         <span style={{ fontSize: "1.5rem" }}>☰</span>
       </div>
@@ -76,13 +81,14 @@ function Header() {
 
 function StatusPill({ status }: { status?: string | null }) {
   const normalized = (status || "").toUpperCase();
-
   const base =
     "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium";
 
   if (normalized === "HOT") {
     return (
-      <span className={`${base} bg-red-500/15 text-red-400 border border-red-500/30`}>
+      <span
+        className={`${base} bg-red-500/15 text-red-400 border border-red-500/30`}
+      >
         🔥 HOT
       </span>
     );
@@ -90,14 +96,18 @@ function StatusPill({ status }: { status?: string | null }) {
 
   if (normalized === "NURTURE") {
     return (
-      <span className={`${base} bg-emerald-500/10 text-emerald-300 border border-emerald-500/20`}>
+      <span
+        className={`${base} bg-emerald-500/10 text-emerald-300 border border-emerald-500/20`}
+      >
         🌱 Nurture
       </span>
     );
   }
 
   return (
-    <span className={`${base} bg-slate-500/10 text-slate-300 border border-slate-500/20`}>
+    <span
+      className={`${base} bg-slate-500/10 text-slate-300 border border-slate-500/20`}
+    >
       {normalized || "UNKNOWN"}
     </span>
   );
@@ -108,8 +118,8 @@ function formatShortDateTime(dateString: string | null | undefined) {
   const d = new Date(dateString);
 
   const datePart = d.toLocaleDateString("en-US", {
-    month: "short", // Nov
-    day: "numeric", // 27
+    month: "short",
+    day: "numeric",
   });
 
   const timePart = d.toLocaleTimeString("en-US", {
@@ -120,130 +130,137 @@ function formatShortDateTime(dateString: string | null | undefined) {
   return `${datePart} at ${timePart}`;
 }
 
+/* ------------------------------------------------------------------ */
+/* Main Page                                                          */
+/* ------------------------------------------------------------------ */
 
 export default function Home() {
   // Lead form state
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
 
-  // Lead list + loading / message state
-  const [loading, setLoading] = useState(false); // for Add Lead form
+  // Lead + UI state
+  const [loading, setLoading] = useState(false); // add-lead form
   const [message, setMessage] = useState<string | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [conversation, setConversation] = useState<MessageRow[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(true);
 
-  // Reply box state
-  const [replyText, setReplyText] = useState('');
+  // Conversation + reply box
+  const [conversation, setConversation] = useState<MessageRow[]>([]);
+  const [replyText, setReplyText] = useState("");
   const [sendingReply, setSendingReply] = useState(false);
 
-  // Twilio test state
+  // Twilio test
   const [smsMessage, setSmsMessage] = useState<string | null>(null);
   const [smsLoading, setSmsLoading] = useState(false);
 
-  const handleSendTestSms = async () => {
-  // simple no-op test handler for now
-  console.log("Test SMS button clicked");
-  setSmsLoading(true);
-  try {
-  // later we can call a real test endpoint here
-  setSmsMessage("Test SMS button clicked (no SMS sent in test mode).");
-  } finally {
-  setSmsLoading(false);
-  }
-  };
+  // Pause automation toggle
+  const [automationPaused, setAutomationPaused] = useState(false);
 
-  // Fetch leads from Supabase
- const fetchLeads = async () => {
-  setLoadingLeads(true);
+  /* ------------------------------------------------------------------ */
+  /* Data access helpers                                                */
+  /* ------------------------------------------------------------------ */
 
-  try {
-    const { data, error } = await supabase
-      .from('leads')
-      // safest for now: grab everything so we don't break on column names
-      .select('*')
-      .order('created_at', { ascending: false });
+  const fetchLeads = useCallback(async () => {
+    setLoadingLeads(true);
+    try {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error('Supabase error when loading leads:', error);
-      setMessage(`Error loading leads: ${error.message || 'Unknown error'}`);
-      return;
+      if (error) {
+        console.error("Supabase error when loading leads:", error);
+        setMessage(
+          `Error loading leads: ${error.message || "Unknown error"}`
+        );
+        setLeads([]);
+        return;
+      }
+
+      if (!data) {
+        setLeads([]);
+        return;
+      }
+
+      const mappedLeads: Lead[] = data.map((row: any) => ({
+        id: row.id,
+        created_at: row.created_at,
+        name: row.name,
+        phone: row.phone,
+        email: row.email,
+        source: row.source,
+        status: row.status,
+
+        nurture_status: row.nurture_status,
+        nurture_stage: row.nurture_stage,
+        next_nurture_at: row.next_nurture_at,
+        last_nurture_sent_at: row.last_nurture_sent_at,
+        last_agent_sent_at: row.last_agent_sent_at,
+        nurture_locked_until: row.nurture_locked_until,
+
+        lastContactedAt: row.last_contacted_at ?? null,
+      }));
+
+      setLeads(mappedLeads);
+
+      // Auto-select a lead if none selected yet
+      if (!selectedLead && mappedLeads.length > 0) {
+        const firstHot =
+          mappedLeads.find((l) => l.status === "HOT") || mappedLeads[0];
+        setSelectedLead(firstHot);
+      }
+    } catch (err: any) {
+      console.error("Error loading leads:", err);
+      setMessage(
+        `Error loading leads: ${err.message || "Unknown error"}`
+      );
+      setLeads([]);
+    } finally {
+      setLoadingLeads(false);
     }
+  }, [selectedLead]);
 
-    console.log('Loaded leads:', data);
-    if (!data) {
-  setLeads([]);
-  return;
-}
-
-const mappedLeads: Lead[] = data.map((row: any) => ({
-  id: row.id,
-  name: row.name,
-  phone: row.phone,
-  email: row.email,
-  source: row.source,
-  status: row.status,
-
-  nurture_status: row.nurture_status,
-  nurture_stage: row.nurture_stage,
-  next_nurture_at: row.next_nurture_at,
-  last_nurture_sent_at: row.last_nurture_sent_at,
-  last_agent_sent_at: row.last_agent_sent_at,
-  nurture_locked_until: row.nurture_locked_until,
-
-  // 👇 new field we introduced
-  lastContactedAt: row.last_contacted_at ?? null,
-}));
-
-setLeads(mappedLeads);
-
-    // Auto-select first HOT lead if none selected yet
-if (!selectedLead && mappedLeads.length > 0) {
-  setSelectedLead(mappedLeads[0]);
-}
-
-  } catch (err: any) {
-    console.error('Error loading leads:', err);
-    setMessage(`Error loading leads: ${err.message || 'Unknown error'}`);
-  } finally {
-    // ALWAYS turn off the loading spinner
-    setLoadingLeads(false);
-  }
-};
-
-
-  // Fetch all messages for a lead
-  const fetchMessages = async (leadId: string) => {
-    if (!leadId) return;
+  const fetchMessages = useCallback(
+  async (leadId: string) => {
+    console.log("[fetchMessages] for lead", leadId);
 
     const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('lead_id', leadId)
-      .order('created_at', { ascending: true });
+      .from("messages")
+      .select("*")
+      .order("created_at", { ascending: true });
+
+    console.log("[fetchMessages] result", { error, data });
 
     if (error) {
-      console.error('Error loading messages:', error);
+      console.error("Error loading messages:", error);
       setMessage(`Error loading messages: ${error.message}`);
       return;
     }
 
+    // TEMP: show all messages while we confirm schema
     setConversation((data || []) as MessageRow[]);
-  };
+  },
+  []
+);
 
-  // When you click a HOT lead in the list
+  /* ------------------------------------------------------------------ */
+  /* Actions                                                            */
+  /* ------------------------------------------------------------------ */
+
   const handleSelectLead = async (lead: Lead) => {
     setSelectedLead(lead);
     setMessage(null);
+    // messages + polling are handled by the effect below; this call
+    // gives you a snappier initial load when switching leads:
     await fetchMessages(lead.id);
   };
 
-  // Send reply SMS for the selected lead
- const handleSendReply = async () => {
+  const handleSendReply = async () => {
   if (!selectedLead) {
-    setMessage('Please select a lead first.');
+    setMessage("Please select a lead first.");
     return;
   }
 
@@ -254,29 +271,29 @@ if (!selectedLead && mappedLeads.length > 0) {
     setSendingReply(true);
     setMessage(null);
 
-    const res = await fetch('/api/reply-sms', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await fetch("/api/reply-sms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         leadId: selectedLead.id,
         to: selectedLead.phone,
         body: trimmed,
       }),
     });
-     // Update last_contacted_at timestamp for this lead
-      await supabase
+
+    // Update last_contacted_at
+    await supabase
       .from("leads")
       .update({ last_contacted_at: new Date().toISOString() })
       .eq("id", selectedLead.id);
 
-     // Refresh leads so UI shows updated “Last contacted”
-      await fetchLeads();
+    // Refresh leads so "Last contacted" etc stay in sync
+    await fetchLeads();
 
-    // Try to parse JSON, but don't explode if it's not valid
     const data = await res.json().catch(() => ({} as any));
 
     if (!res.ok) {
-      console.error('reply-sms API returned error', res.status, data);
+      console.error("reply-sms API returned error", res.status, data);
       setMessage(
         data?.error ||
           `Error sending reply (status ${res.status}). Check server logs.`
@@ -284,105 +301,148 @@ if (!selectedLead && mappedLeads.length > 0) {
       return;
     }
 
-    // Clear the input
-    setReplyText('');
+    // ✅ LOCAL ECHO: show the new message immediately in the UI
+    const nowIso = new Date().toISOString();
+    setConversation((prev) => [
+      ...prev,
+      {
+        id: `local-${nowIso}`, // temporary local id
+        lead_id: selectedLead.id,
+        direction: "OUTBOUND",
+        channel: "sms",
+        body: trimmed,
+        created_at: nowIso,
+      } as MessageRow,
+    ]);
 
-    // Refresh conversation so the new outbound message shows up
-    await fetchMessages(selectedLead.id);
+    // Clear input
+    setReplyText("");
+
+    // ❌ IMPORTANT: DO NOT call fetchMessages here.
+    // The 5s polling effect will pick up the DB row when it exists.
+    // If we call fetchMessages immediately and the DB isn’t updated yet,
+    // we wipe out the locally-added message.
   } catch (err: any) {
-    console.error('Error sending reply:', err);
-    setMessage(err?.message || 'Error sending reply');
+    console.error("Error sending reply:", err);
+    setMessage(err?.message || "Error sending reply");
   } finally {
     setSendingReply(false);
   }
 };
 
-  // Add a new HOT lead (form at the bottom-left)
   const addLead = async (e: FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage(null);
+  e.preventDefault();
+  setLoading(true);
+  setMessage(null);
 
-    try {
-   const { error } = await supabase.from("leads").insert({
-   name,
-   phone,
-   email,
-   source: "manual",                     // keep your existing value if different
-   status: "NURTURE",                        // this form is for HOT leads
-   nurture_status: "ACTIVE",             // included in edge-function filter
-   nurture_stage: "DAY_1",               // start at day 1
-   next_nurture_at: new Date().toISOString(), // schedule first nurture SMS
-});
+  console.log("[addLead] submitting", { name, phone, email });
 
-      if (error) {
-        throw error;
-      }
+  try {
+    const { data, error } = await supabase
+      .from("leads")
+      .insert({
+        name,
+        phone,
+        email,
+        source: "manual",
+        status: "NURTURE",
+        nurture_status: "ACTIVE",
+        nurture_stage: "DAY_1",
+        next_nurture_at: new Date().toISOString(),
+      })
+      .select(); // ask Supabase to return the row so we know it worked
 
-      setName('');
-      setPhone('');
-      setEmail('');
-      setMessage('Lead added successfully.');
+    console.log("[addLead] Supabase response", { data, error });
 
-      // Reload leads so the new one appears in the HOT list
-      await fetchLeads();
-    } catch (err: any) {
-      console.error('Error adding lead:', err);
-      setMessage(`Error adding lead: ${err.message || 'Unknown error'}`);
-    } finally {
-      setLoading(false);
+    if (error) {
+      // This is the IMPORTANT part — show the actual supabase error
+      setMessage(`Supabase insert error: ${error.message}`);
+      return;
     }
-  };
 
-  // Twilio “Send Test SMS” button
+    setName("");
+    setPhone("");
+    setEmail("");
+    setMessage("Lead added successfully.");
+
+    await fetchLeads();
+  } catch (err: any) {
+    console.error("[addLead] Network / unknown error", err);
+    // This is where "TypeError: Failed to fetch" will show if it’s truly network
+    setMessage(
+      `Network or unknown error adding lead: ${
+        err?.message || "Unknown error"
+      }`
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
+
   const sendTestSms = async () => {
     try {
       setSmsLoading(true);
       setSmsMessage(null);
 
-      const res = await fetch('/api/test-sms', {
-        method: 'POST',
+      const res = await fetch("/api/test-sms", {
+        method: "POST",
       });
 
       const body = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(body.error || 'Failed to send SMS');
+        throw new Error(body.error || "Failed to send SMS");
       }
 
-      setSmsMessage('Test SMS sent!');
+      setSmsMessage("Test SMS sent!");
     } catch (err: any) {
       console.error(err);
-      setSmsMessage(err.message || 'Error sending test SMS');
+      setSmsMessage(err.message || "Error sending test SMS");
     } finally {
       setSmsLoading(false);
     }
   };
 
-  // Load leads on first render
+  /* ------------------------------------------------------------------ */
+  /* Effects                                                            */
+  /* ------------------------------------------------------------------ */
+
+  // Load leads once on first render
   useEffect(() => {
     fetchLeads();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchLeads]);
 
+  // When selected lead changes, un-pause automation
   useEffect(() => {
-  // If no lead is selected yet, don't start polling
-  if (!selectedLead) return;
+    if (!selectedLead?.id) return;
+    setAutomationPaused(false);
+  }, [selectedLead?.id]);
 
-  // Load messages immediately when a lead is selected
-  fetchMessages(selectedLead.id);
+  // When a lead is selected:
+  // - load messages immediately
+  // - start polling every 5 seconds
+  // - stop polling when lead changes or component unmounts
+  useEffect(() => {
+    if (!selectedLead?.id) return;
 
-  // Then poll every 5 seconds for new messages
-  const intervalId = setInterval(() => {
+    // Initial load
     fetchMessages(selectedLead.id);
-  }, 5000); // 5000ms = 5 seconds
 
-  // Cleanup when selected lead changes or component unmounts
-  return () => clearInterval(intervalId);
-}, [selectedLead?.id]);
+    const intervalId = window.setInterval(() => {
+      fetchMessages(selectedLead.id);
+    }, 5000);
 
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [selectedLead?.id, fetchMessages]);
 
-    return (
+  /* ------------------------------------------------------------------ */
+  /* Render                                                             */
+  /* ------------------------------------------------------------------ */
+
+  return (
     <>
       <Header />
 
@@ -468,7 +528,7 @@ if (!selectedLead && mappedLeads.length > 0) {
           </div>
         </div>
 
-        {/* Main layout: left = list + add, right = conversation */}
+        {/* Main layout */}
         <div
           className="ls-main-layout"
           style={{
@@ -662,34 +722,23 @@ if (!selectedLead && mappedLeads.length > 0) {
           </div>
 
           {/* RIGHT COLUMN – Conversation */}
-          <aside
-            style={{
-              flex: 1.2,
-              borderRadius: "1rem",
-              border: "1px solid #1f2937",
-              padding: "1.5rem",
-            }}
-          >
+          
+            <aside
+              style={{
+                flex: 1.2,
+                borderRadius: "1rem",
+               border: "1px solid #1f2937",
+               padding: "1rem 1.5rem 1.5rem", // less top padding
+               display: "flex",
+               flexDirection: "column",
+             }}
+            >
+
             {/* Lead header */}
             <p style={{ marginBottom: "0.25rem" }}>
               <strong>{selectedLead?.name || "No lead selected"}</strong>
             </p>
-            <p
-              style={{
-                marginBottom: "0.25rem",
-                fontSize: "0.9rem",
-              }}
-            >
-              📞 {selectedLead?.phone || "Select a lead from the left"}
-            </p>
-            <p
-              style={{
-                marginBottom: "0.75rem",
-                fontSize: "0.9rem",
-              }}
-            >
-              📧 {selectedLead?.email || ""}
-            </p>
+
             <div style={{ marginBottom: "0.75rem" }}>
               <span style={{ color: "#aaa", marginRight: "0.5rem" }}>
                 Status:
@@ -697,332 +746,346 @@ if (!selectedLead && mappedLeads.length > 0) {
               <StatusPill status={selectedLead?.status || null} />
             </div>
 
-            {/* Messages list / empty state */}
-            <div
+            <button
+              type="button"
+              onClick={() => setAutomationPaused((prev) => !prev)}
+              disabled={!selectedLead}
               style={{
-                borderRadius: "0.75rem",
-                border: "1px solid #444",
-                padding: "0.75rem 1rem",
-                maxHeight: "260px",
-                overflowY: "auto",
+                fontSize: "0.75rem",
+                padding: "0.35rem 0.75rem",
+                borderRadius: "999px",
+                border: "1px solid #374151",
+                backgroundColor: automationPaused
+                  ? "rgba(239, 68, 68, 0.15)"
+                  : "rgba(16, 185, 129, 0.15)",
+                color: automationPaused ? "#fecaca" : "#6ee7b7",
+                cursor: !selectedLead ? "default" : "pointer",
+                opacity: !selectedLead ? 0.4 : 1,
                 marginBottom: "0.75rem",
               }}
             >
-              {conversation.length === 0 ? (
-                // EMPTY: timeline + “now you are here” + chips
+              {automationPaused ? "⏸ Automation Paused" : "🟢 Automation Active"}
+            </button>
+
+            <div
+  style={{
+    borderRadius: "0.75rem",
+    border: "1px solid #444",
+    padding: "0.75rem 1rem",
+    maxHeight: "260px",
+    overflowY: "auto",
+    marginBottom: "0.75rem",
+  }}
+>
+  {conversation.length === 0 ? (
+    // EMPTY: timeline + “now you are here” + chips
+    <div
+      style={{
+        textAlign: "center",
+        padding: "2.5rem 0.5rem",
+        opacity: 0.9,
+        color: "#e5e7eb",
+        fontSize: "0.9rem",
+        lineHeight: 1.5,
+      }}
+    >
+      <div style={{ padding: "0.25rem 0" }}>
+        <div style={{ marginBottom: "1rem" }}>
+          {/* Event 1 – Lead captured */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              marginBottom: "0.75rem",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                marginRight: "0.75rem",
+              }}
+            >
+              <div
+                style={{
+                  width: "0.5rem",
+                  height: "0.5rem",
+                  borderRadius: "999px",
+                  backgroundColor: "#9ca3af",
+                }}
+              />
+              <div
+                style={{
+                  flex: 1,
+                  width: "1px",
+                  backgroundColor: "#374151",
+                  marginTop: "0.15rem",
+                }}
+              />
+            </div>
+
+            <div style={{ textAlign: "left" }}>
+              <div
+                style={{
+                  fontSize: "0.75rem",
+                  color: "#9ca3af",
+                }}
+              >
+                {selectedLead?.created_at &&
+                  new Date(
+                    selectedLead.created_at as any
+                  ).toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+              </div>
+              <div>
+                Lead captured
+                {selectedLead?.source
+                  ? ` from ${selectedLead.source}`
+                  : ""}
+              </div>
+            </div>
+          </div>
+
+          {/* Event 2 – Added to workflow */}
+          {selectedLead?.nurture_status && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                marginBottom: "0.75rem",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  marginRight: "0.75rem",
+                }}
+              >
                 <div
                   style={{
-                    textAlign: "center",
-                    padding: "2.5rem 0.5rem",
-                    opacity: 0.9,
-                    color: "#e5e7eb",
-                    fontSize: "0.9rem",
-                    lineHeight: 1.5,
+                    width: "0.5rem",
+                    height: "0.5rem",
+                    borderRadius: "999px",
+                    backgroundColor: "#9ca3af",
+                  }}
+                />
+                <div
+                  style={{
+                    flex: 1,
+                    width: "1px",
+                    backgroundColor: "#374151",
+                    marginTop: "0.15rem",
+                  }}
+                />
+              </div>
+
+              <div style={{ textAlign: "left" }}>
+                <div
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "#9ca3af",
                   }}
                 >
-                  <div style={{ padding: "0.25rem 0" }}>
-                    <div style={{ marginBottom: "1rem" }}>
-                      {/* Event 1 – Lead captured */}
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          marginBottom: "0.75rem",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            marginRight: "0.75rem",
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: "0.5rem",
-                              height: "0.5rem",
-                              borderRadius: "999px",
-                              backgroundColor: "#9ca3af",
-                            }}
-                          />
-                          <div
-                            style={{
-                              flex: 1,
-                              width: "1px",
-                              backgroundColor: "#374151",
-                              marginTop: "0.15rem",
-                            }}
-                          />
-                        </div>
-
-                        <div style={{ textAlign: "left" }}>
-                          <div
-                            style={{
-                              fontSize: "0.75rem",
-                              color: "#9ca3af",
-                            }}
-                          >
-                            {selectedLead?.created_at &&
-                              new Date(
-                                selectedLead.created_at as any
-                              ).toLocaleTimeString("en-US", {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                          </div>
-                          <div>
-                            Lead captured
-                            {selectedLead?.source
-                              ? ` from ${selectedLead.source}`
-                              : ""}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Event 2 – Added to workflow */}
-                      {selectedLead?.nurture_status && (
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            marginBottom: "0.75rem",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              alignItems: "center",
-                              marginRight: "0.75rem",
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: "0.5rem",
-                                height: "0.5rem",
-                                borderRadius: "999px",
-                                backgroundColor: "#9ca3af",
-                              }}
-                            />
-                            <div
-                              style={{
-                                flex: 1,
-                                width: "1px",
-                                backgroundColor: "#374151",
-                                marginTop: "0.15rem",
-                              }}
-                            />
-                          </div>
-
-                          <div style={{ textAlign: "left" }}>
-                            <div
-                              style={{
-                                fontSize: "0.75rem",
-                                color: "#9ca3af",
-                              }}
-                            >
-                              Workflow
-                            </div>
-                            <div>
-                              Added to workflow (
-                              {selectedLead.nurture_status.toLowerCase()})
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Event 3 – Scheduled next message */}
-                      {selectedLead?.next_nurture_at && (
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            marginBottom: "0.75rem",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              alignItems: "center",
-                              marginRight: "0.75rem",
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: "0.6rem",
-                                height: "0.6rem",
-                                borderRadius: "999px",
-                                backgroundColor: "#facc15",
-                              }}
-                            />
-                          </div>
-
-                          <div style={{ textAlign: "left" }}>
-                            <div
-                              style={{
-                                fontSize: "0.75rem",
-                                color: "#9ca3af",
-                              }}
-                            >
-                              Upcoming
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "0.9rem",
-                                fontWeight: 500,
-                                color: "#facc15",
-                              }}
-                            >
-                              Scheduled next message:{" "}
-                              {formatShortDateTime(
-                                selectedLead.next_nurture_at
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Now you are here */}
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        fontSize: "0.75rem",
-                        color: "#9ca3af",
-                        marginTop: "1rem",
-                      }}
-                    >
-                      <div
-                        style={{
-                          flex: 1,
-                          height: "1px",
-                          backgroundColor: "#374151",
-                        }}
-                      />
-                      <span style={{ padding: "0 0.5rem" }}>
-                        [ Now you are here ]
-                      </span>
-                      <div
-                        style={{
-                          flex: 1,
-                          height: "1px",
-                          backgroundColor: "#374151",
-                        }}
-                      />
-                    </div>
-
-                    <p
-                      style={{
-                        marginTop: "0.75rem",
-                        fontSize: "0.85rem",
-                      }}
-                    >
-                      Start the conversation by sending a message below.
-                    </p>
-
-                    {/* Quick action chips */}
-                    <div
-                      style={{
-                        marginTop: "0.5rem",
-                        display: "flex",
-                        gap: "0.5rem",
-                        flexWrap: "wrap",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <button
-                        type="button"
-                        style={{
-                          padding: "0.35rem 0.75rem",
-                          borderRadius: "999px",
-                          border: "1px solid #374151",
-                          backgroundColor: "rgba(55,65,81,0.4)",
-                          fontSize: "0.8rem",
-                          cursor: "pointer",
-                        }}
-                        onClick={() =>
-                          setReplyText(
-                            "Hi, this is [Your Name] with [Your Brokerage]. I wanted to personally introduce myself and see where you are in your plans to sell."
-                          )
-                        }
-                      >
-                        👋 Send Intro
-                      </button>
-
-                      <button
-                        type="button"
-                        style={{
-                          padding: "0.35rem 0.75rem",
-                          borderRadius: "999px",
-                          border: "1px solid #374151",
-                          backgroundColor: "rgba(55,65,81,0.4)",
-                          fontSize: "0.8rem",
-                          cursor: "pointer",
-                        }}
-                        onClick={() =>
-                          setReplyText(
-                            "Do you have 10–15 minutes this week for a quick call so I can give you a pricing + timing game plan for your home?"
-                          )
-                        }
-                      >
-                        📅 Book Call
-                      </button>
-                    </div>
-                  </div>
+                  Workflow
                 </div>
-              ) : (
-                // NON-EMPTY: show actual messages
-                <div style={{ padding: "0.25rem 0" }}>
-                  {conversation.map((msg: MessageRow) => {
-                    const isInbound = msg.direction === "INBOUND";
-
-                    return (
-                      <div
-                        key={msg.id}
-                        style={{
-                          marginBottom: "0.75rem",
-                          textAlign: isInbound ? "left" : "right",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: "0.75rem",
-                            color: "#9ca3af",
-                            marginBottom: "0.15rem",
-                          }}
-                        >
-                          {new Date(msg.created_at).toLocaleTimeString(
-                            "en-US",
-                            {
-                              hour: "numeric",
-                              minute: "2-digit",
-                            }
-                          )}
-                        </div>
-
-                        <div
-                          style={{
-                            display: "inline-block",
-                            padding: "0.35rem 0.6rem",
-                            borderRadius: "0.5rem",
-                            backgroundColor: isInbound
-                              ? "#111827"
-                              : "#1f2937",
-                            border: "1px solid #374151",
-                            fontSize: "0.85rem",
-                          }}
-                        >
-                          {msg.body}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div>
+                  Added to workflow (
+                  {selectedLead.nurture_status.toLowerCase()})
                 </div>
-              )}
+              </div>
             </div>
+          )}
+
+          {/* Event 3 – Scheduled next message */}
+          {selectedLead?.next_nurture_at && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                marginBottom: "0.75rem",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  marginRight: "0.75rem",
+                }}
+              >
+                <div
+                  style={{
+                    width: "0.6rem",
+                    height: "0.6rem",
+                    borderRadius: "999px",
+                    backgroundColor: "#facc15",
+                  }}
+                />
+              </div>
+
+              <div style={{ textAlign: "left" }}>
+                <div
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "#9ca3af",
+                  }}
+                >
+                  Upcoming
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.9rem",
+                    fontWeight: 500,
+                    color: "#facc15",
+                  }}
+                >
+                  Scheduled next message:{" "}
+                  {formatShortDateTime(selectedLead.next_nurture_at)}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Now you are here */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            fontSize: "0.75rem",
+            color: "#9ca3af",
+            marginTop: "1rem",
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              height: "1px",
+              backgroundColor: "#374151",
+            }}
+          />
+          <span style={{ padding: "0 0.5rem" }}>
+            [ Now you are here ]
+          </span>
+          <div
+            style={{
+              flex: 1,
+              height: "1px",
+              backgroundColor: "#374151",
+            }}
+          />
+        </div>
+
+        <p
+          style={{
+            marginTop: "0.75rem",
+            fontSize: "0.85rem",
+          }}
+        >
+          Start the conversation by sending a message below.
+        </p>
+
+        {/* Quick action chips */}
+        <div
+          style={{
+            marginTop: "0.5rem",
+            display: "flex",
+            gap: "0.5rem",
+            flexWrap: "wrap",
+            justifyContent: "center",
+          }}
+        >
+          <button
+            type="button"
+            style={{
+              padding: "0.35rem 0.75rem",
+              borderRadius: "999px",
+              border: "1px solid #374151",
+              backgroundColor: "rgba(55,65,81,0.4)",
+              fontSize: "0.8rem",
+              cursor: "pointer",
+            }}
+            onClick={() =>
+              setReplyText(
+                "Hi, this is [Your Name] with [Your Brokerage]. I wanted to personally introduce myself and see where you are in your plans to sell."
+              )
+            }
+          >
+            👋 Send Intro
+          </button>
+
+          <button
+            type="button"
+            style={{
+              padding: "0.35rem 0.75rem",
+              borderRadius: "999px",
+              border: "1px solid #374151",
+              backgroundColor: "rgba(55,65,81,0.4)",
+              fontSize: "0.8rem",
+              cursor: "pointer",
+            }}
+            onClick={() =>
+              setReplyText(
+                "Do you have 10–15 minutes this week for a quick call so I can give you a pricing + timing game plan for your home?"
+              )
+            }
+          >
+            📅 Book Call
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : (
+    // NON-EMPTY: show actual messages
+    <div style={{ padding: "0.25rem 0" }}>
+      {conversation.map((msg: MessageRow) => {
+        const isInbound = msg.direction === "INBOUND";
+
+        return (
+          <div
+            key={msg.id}
+            style={{
+              marginBottom: "0.75rem",
+              textAlign: isInbound ? "left" : "right",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "0.75rem",
+                color: "#9ca3af",
+                marginBottom: "0.15rem",
+              }}
+            >
+              {new Date(msg.created_at).toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </div>
+
+            <div
+              style={{
+                display: "inline-block",
+                padding: "0.35rem 0.6rem",
+                borderRadius: "0.5rem",
+                backgroundColor: isInbound ? "#111827" : "#1f2937",
+                border: "1px solid #374151",
+                fontSize: "0.85rem",
+                }}
+            >
+              {msg.body}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  )}
+</div> 
+            {/* --- END conversation block --- */}
 
             {/* Reply form */}
             <div>
@@ -1052,7 +1115,9 @@ if (!selectedLead && mappedLeads.length > 0) {
                 />
                 <button
                   type="submit"
-                  disabled={!selectedLead || sendingReply || !replyText.trim()}
+                  disabled={
+                    !selectedLead || sendingReply || !replyText.trim()
+                  }
                   style={{
                     padding: "0.55rem 1rem",
                     borderRadius: "999px",
@@ -1086,6 +1151,31 @@ if (!selectedLead && mappedLeads.length > 0) {
                 Replies here send an SMS to this lead and are logged in the
                 conversation above.
               </p>
+            </div>
+
+            {/* Optional: Test SMS button + status */}
+            <div style={{ marginTop: "1rem", fontSize: "0.8rem" }}>
+              <button
+                type="button"
+                onClick={sendTestSms}
+                disabled={smsLoading}
+                style={{
+                  padding: "0.4rem 0.9rem",
+                  borderRadius: "999px",
+                  border: "1px solid #374151",
+                  backgroundColor: "rgba(37, 99, 235, 0.9)",
+                  fontSize: "0.8rem",
+                  cursor: smsLoading ? "default" : "pointer",
+                  opacity: smsLoading ? 0.6 : 1,
+                }}
+              >
+                {smsLoading ? "Sending SMS…" : "Send SMS"}
+              </button>
+              {smsMessage && (
+                <span style={{ marginLeft: "0.5rem", color: "#9ca3af" }}>
+                  {smsMessage}
+                </span>
+              )}
             </div>
           </aside>
         </div>
