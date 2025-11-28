@@ -1178,7 +1178,6 @@ export default function Home() {
             {/* Optional: Test SMS button + status */}
             <div style={{ marginTop: "1rem", fontSize: "0.8rem" }}>
               <button
-                disabled={smsLoading}
                 style={{
                   padding: "0.4rem 0.9rem",
                   borderRadius: "999px",
