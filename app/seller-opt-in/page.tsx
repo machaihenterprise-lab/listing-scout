@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -41,8 +40,7 @@ export default function SellerOptInPage() {
     setLoading(true);
 
     try {
-      // TODO: plug into Supabase or an API route if you want to store these.
-      // For now we just simulate a successful submit.
+      // TODO: later we can store this in Supabase or call an API route.
       await new Promise((resolve) => setTimeout(resolve, 700));
 
       setMessage(
@@ -114,7 +112,7 @@ export default function SellerOptInPage() {
         </p>
 
         <form onSubmit={handleSubmit}>
-          {/* Name */}
+          {/* Full name */}
           <div style={{ marginBottom: "0.75rem" }}>
             <label
               style={{
@@ -229,16 +227,37 @@ export default function SellerOptInPage() {
             </span>
           </label>
 
-             <p style={{ fontSize: "0.75rem", color: "#aaa", marginTop: "0.5rem" }}>
-             Your mobile information will not be shared or sold to third parties for marketing or promotional purposes.
-           </p>
-
-             <p style={{ fontSize: "0.75rem", color: "#aaa" }}>
-             View our <a href="https://www.notion.so" target="_blank" style={{ color: "#66aaff" }}>Privacy Policy</a>.
+          {/* Privacy sentence + link (Telnyx requirement) */}
+          <p
+            style={{
+              marginTop: "0.5rem",
+              fontSize: "0.75rem",
+              color: "#9ca3af",
+            }}
+          >
+            Your mobile information will not be shared or sold to third parties
+            for marketing or promotional purposes.
           </p>
 
+          <p
+            style={{
+              fontSize: "0.75rem",
+              color: "#9ca3af",
+            }}
+          >
+            View our{" "}
+            <a
+              href="https://example.com/privacy"
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: "#60a5fa", textDecoration: "underline" }}
+            >
+              Privacy Policy
+            </a>
+            .
+          </p>
 
-          {/* Extra explicit text (matches what Telnyx wants) */}
+          {/* TCPA paragraph */}
           <p
             style={{
               marginTop: "0.55rem",
