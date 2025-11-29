@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -15,7 +16,6 @@ export default function SellerOptInPage() {
     e.preventDefault();
 
     const trimmedName = name.trim();
-    const trimmedPhone = phone.trim();
 
     if (!trimmedName) {
       setError("Please enter your full name.");
@@ -23,12 +23,7 @@ export default function SellerOptInPage() {
       return;
     }
 
-    if (!trimmedPhone) {
-      setError("Please enter your mobile phone number.");
-      setMessage(null);
-      return;
-    }
-
+    // Phone is now OPTIONAL for compliance with carrier rules
     if (!consent) {
       setError("Please check the box to agree to receive SMS messages.");
       setMessage(null);
@@ -60,8 +55,8 @@ export default function SellerOptInPage() {
     }
   };
 
-  const buttonDisabled =
-    loading || !name.trim() || !phone.trim() || !consent;
+  // Button now only depends on name + consent (phone optional)
+  const buttonDisabled = loading || !name.trim() || !consent;
 
   return (
     <main
@@ -170,7 +165,7 @@ export default function SellerOptInPage() {
             />
           </div>
 
-          {/* Phone */}
+          {/* Phone (optional for compliance) */}
           <div style={{ marginBottom: "0.75rem" }}>
             <label
               style={{
@@ -180,7 +175,7 @@ export default function SellerOptInPage() {
                 color: "#e5e7eb",
               }}
             >
-              Mobile phone number
+              Mobile phone number <span style={{ color: "#9ca3af" }}>(optional)</span>
             </label>
             <input
               type="tel"
@@ -197,9 +192,19 @@ export default function SellerOptInPage() {
                 fontSize: "0.9rem",
               }}
             />
+            <p
+              style={{
+                marginTop: "0.25rem",
+                fontSize: "0.75rem",
+                color: "#9ca3af",
+              }}
+            >
+              If you’d like SMS updates, please include your mobile number and
+              check the box below.
+            </p>
           </div>
 
-          {/* Checkbox consent */}
+          {/* Checkbox consent (required) */}
           <label
             style={{
               display: "flex",
@@ -218,31 +223,38 @@ export default function SellerOptInPage() {
               style={{ marginTop: "0.2rem" }}
             />
             <span>
-              [ ] I agree to receive SMS messages about selling my home from FlowEase Studio (Listing Scout).
-
-               By submitting this form, I agree to receive SMS updates from FlowEase Studio (Listing Scout). Message & data rates may apply. Message frequency varies. Reply STOP to unsubscribe or HELP for help.
+              I agree to receive SMS updates about selling my home from{" "}
+              <strong>FlowEase Studio (Listing Scout)</strong>.
+            </span>
           </label>
 
-          {/* Privacy sentence + link (Telnyx requirement) */}
+          {/* Single, clean disclosure sentence */}
           <p
             style={{
               marginTop: "0.5rem",
               fontSize: "0.75rem",
               color: "#9ca3af",
+              lineHeight: 1.4,
             }}
           >
-
+            By submitting this form, I agree to receive SMS updates from
+            FlowEase Studio (Listing Scout). Message &amp; data rates may apply.
+            Message frequency varies. Reply STOP to unsubscribe or HELP for
+            help. My mobile information will not be shared or sold to third
+            parties for marketing or promotional purposes.
           </p>
 
+          {/* Optional: Privacy Policy link (nice to have) */}
           <p
             style={{
+              marginTop: "0.25rem",
               fontSize: "0.75rem",
               color: "#9ca3af",
             }}
           >
             View our{" "}
             <a
-              href="https://floweasestudio.com/privacy"
+              href="https://example.com/privacy"
               target="_blank"
               rel="noreferrer"
               style={{ color: "#60a5fa", textDecoration: "underline" }}
@@ -250,18 +262,6 @@ export default function SellerOptInPage() {
               Privacy Policy
             </a>
             .
-          </p>
-
-          {/* TCPA paragraph */}
-          <p
-            style={{
-              marginTop: "0.55rem",
-              fontSize: "0.75rem",
-              color: "#9ca3af",
-              lineHeight: 1.4,
-            }}
-          >
-    
           </p>
 
           {/* Submit */}
@@ -317,8 +317,8 @@ export default function SellerOptInPage() {
               color: "#6b7280",
             }}
           >
-            Your mobile information will not be shared or sold to third parties
-            for marketing or promotional purposes.
+            FlowEase Studio (Listing Scout) • Real estate seller lead follow-up
+            and consultation. You can unsubscribe anytime by replying STOP.
           </p>
         </form>
       </div>
