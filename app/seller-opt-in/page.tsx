@@ -220,9 +220,7 @@ export default function SellerOptInPage() {
             <span>
               [ ] I agree to receive SMS messages about selling my home from FlowEase Studio (Listing Scout).
 
-               By submitting this form, I agree to receive SMS updates from FlowEase Studio (Listing Scout). Message & data rates may apply. Message frequency varies. Reply STOP to unsubscribe or HELP for help. View terms at https://floweasestudio.com/terms.
-
-            </span>
+               By submitting this form, I agree to receive SMS updates from FlowEase Studio (Listing Scout). Message & data rates may apply. Message frequency varies. Reply STOP to unsubscribe or HELP for help.
           </label>
 
           {/* Privacy sentence + link (Telnyx requirement) */}
