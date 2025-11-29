@@ -218,12 +218,10 @@ export default function SellerOptInPage() {
               style={{ marginTop: "0.2rem" }}
             />
             <span>
-              I agree to receive SMS messages about selling my home and related
-              real estate updates from{" "}
-              <strong>FlowEase Studio (Listing Scout)</strong>. Message &amp;
-              data rates may apply. Message frequency varies. Reply{" "}
-              <strong>STOP</strong> to unsubscribe, <strong>HELP</strong> for
-              help.
+              [ ] I agree to receive SMS messages about selling my home from FlowEase Studio (Listing Scout).
+
+               By submitting this form, I agree to receive SMS updates from FlowEase Studio (Listing Scout). Message & data rates may apply. Message frequency varies. Reply STOP to unsubscribe or HELP for help. My mobile information will not be shared or sold to third parties for marketing or promotional purposes.
+
             </span>
           </label>
 
@@ -235,8 +233,7 @@ export default function SellerOptInPage() {
               color: "#9ca3af",
             }}
           >
-            Your mobile information will not be shared or sold to third parties
-            for marketing or promotional purposes.
+
           </p>
 
           <p
@@ -247,7 +244,7 @@ export default function SellerOptInPage() {
           >
             View our{" "}
             <a
-              href="https://example.com/privacy"
+              href="https://floweasestudio.com/privacy"
               target="_blank"
               rel="noreferrer"
               style={{ color: "#60a5fa", textDecoration: "underline" }}
@@ -266,10 +263,7 @@ export default function SellerOptInPage() {
               lineHeight: 1.4,
             }}
           >
-            By submitting this form, you agree to receive SMS messages about
-            selling your home and real estate updates from FlowEase Studio
-            (Listing Scout). Message and data rates may apply. Message frequency
-            varies. Reply STOP to unsubscribe or HELP for help.
+    
           </p>
 
           {/* Submit */}
@@ -325,8 +319,8 @@ export default function SellerOptInPage() {
               color: "#6b7280",
             }}
           >
-            FlowEase Studio (Listing Scout) • Real estate seller lead follow-up
-            and consultation. You can unsubscribe anytime by replying STOP.
+            Your mobile information will not be shared or sold to third parties
+            for marketing or promotional purposes.
           </p>
         </form>
       </div>
