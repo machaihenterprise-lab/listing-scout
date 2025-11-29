@@ -87,11 +87,10 @@ export async function POST(req: Request) {
       },
       { status: 200 }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Unexpected server error";
     console.error("Unexpected /api/reply-sms error:", err);
-    return NextResponse.json(
-      { error: err?.message || "Unexpected server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

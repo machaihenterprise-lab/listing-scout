@@ -45,11 +45,13 @@ export default function SellerOptInPage() {
       setEmail("");
       setPhone("");
       setConsent(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Opt-in submit error:", err);
-      setError(
-        err?.message || "Something went wrong while submitting the form."
-      );
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Something went wrong while submitting the form.";
+      setError(message);
     } finally {
       setLoading(false);
     }

@@ -4,6 +4,7 @@ import React, {
   FormEvent,
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { supabase } from "../lib/supabaseClient";
@@ -40,9 +41,37 @@ type MessageRow = {
 /* Header + small helpers                                             */
 /* ------------------------------------------------------------------ */
 
-function Header() {
+type HeaderProps = {
+  onHeightChange?: (h: number) => void;
+};
+
+function Header({ onHeightChange }: HeaderProps) {
+  const elRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const el = elRef.current;
+    if (!el) return;
+
+    // Prefer ResizeObserver when available
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => {
+        onHeightChange?.(el.offsetHeight);
+      });
+      ro.observe(el);
+      // initial
+      onHeightChange?.(el.offsetHeight);
+      return () => ro.disconnect();
+    }
+
+    const measure = () => onHeightChange?.(el.offsetHeight);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [onHeightChange]);
+
   return (
     <header
+      ref={elRef as React.RefObject<HTMLElement>}
       style={{
         width: "100%",
         padding: "1rem 2rem",
@@ -153,11 +182,74 @@ export default function Home() {
   const [sendingReply, setSendingReply] = useState(false);
 
   // Twilio test
-  const [smsMessage, setSmsMessage] = useState<string | null>(null);
-  const [smsLoading, setSmsLoading] = useState(false);
+  // Twilio test (removed UI) - no local state needed
 
   // Pause automation toggle
   const [automationPaused, setAutomationPaused] = useState(false);
+
+  // Left column UI: search, filter, modal
+  const [searchTerm, setSearchTerm] = useState("");
+  const [leadFilter, setLeadFilter] = useState<"HOT" | "NURTURE" | "ALL">("HOT");
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const quickAddNameRef = useRef<HTMLInputElement | null>(null);
+  const modalNameRef = useRef<HTMLInputElement | null>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Snooze UI state
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const [snoozeCustomDate, setSnoozeCustomDate] = useState<string>("");
+  const [snoozeLoading, setSnoozeLoading] = useState(false);
+  const snoozeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [snoozePopoverPos, setSnoozePopoverPos] = useState<{ left: number; top: number } | null>(null);
+
+  // Undo toast state after snooze
+  const [undoPayload, setUndoPayload] = useState<null | { leadId: string; prevStatus: string | null }>(null);
+  const [undoVisible, setUndoVisible] = useState(false);
+
+  // Header height provided by `Header` via `onHeightChange`
+  const [headerHeight, setHeaderHeight] = useState<number>(0);
+
+  // Scroll behavior controls
+  const SCROLL_THRESHOLD_PX = 150; // distance from bottom to consider "near bottom"
+  const [isScrolledUp, setIsScrolledUp] = useState(false);
+  const [autoScrollAlways, setAutoScrollAlways] = useState(false);
+
+  const scrollToBottom = useCallback((force = false) => {
+    const el = messagesEndRef.current;
+    if (!el) return;
+
+    // If not forcing and user is scrolled up and auto-scroll is not always-on, bail
+    if (!force && isScrolledUp && !autoScrollAlways) return;
+
+    try {
+      (el as HTMLDivElement).scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    } catch {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [isScrolledUp, autoScrollAlways]);
+
+  // Load persisted preference for auto-scroll mode (localStorage)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("ls:autoScrollAlways");
+      if (raw !== null) {
+        setAutoScrollAlways(raw === "1");
+      }
+    } catch {
+      // ignore (SSR or privacy settings)
+    }
+  }, []);
+
+  // Persist preference when it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem("ls:autoScrollAlways", autoScrollAlways ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [autoScrollAlways]);
 
   /* ------------------------------------------------------------------ */
   /* Data access helpers                                                */
@@ -185,24 +277,27 @@ export default function Home() {
         return;
       }
 
-      const mappedLeads: Lead[] = data.map((row: any) => ({
-        id: row.id,
-        created_at: row.created_at,
-        name: row.name,
-        phone: row.phone,
-        email: row.email,
-        source: row.source,
-        status: row.status,
+      const mappedLeads: Lead[] = (data as Array<Record<string, unknown>>).map((row) => {
+        const r = row as Partial<Lead>;
+        return {
+          id: (r.id as string) || "",
+          created_at: (r.created_at as string) ?? null,
+          name: (r.name as string) || "",
+          phone: (r.phone as string) || "",
+          email: (r.email as string) || "",
+          source: (r.source as string) ?? null,
+          status: (r.status as string) ?? null,
 
-        nurture_status: row.nurture_status,
-        nurture_stage: row.nurture_stage,
-        next_nurture_at: row.next_nurture_at,
-        last_nurture_sent_at: row.last_nurture_sent_at,
-        last_agent_sent_at: row.last_agent_sent_at,
-        nurture_locked_until: row.nurture_locked_until,
+          nurture_status: (r.nurture_status as string) ?? null,
+          nurture_stage: (r.nurture_stage as string) ?? null,
+          next_nurture_at: (r.next_nurture_at as string) ?? null,
+          last_nurture_sent_at: (r.last_nurture_sent_at as string) ?? null,
+          last_agent_sent_at: (r.last_agent_sent_at as string) ?? null,
+          nurture_locked_until: (r.nurture_locked_until as string) ?? null,
 
-        lastContactedAt: row.last_contacted_at ?? null,
-      }));
+          lastContactedAt: ((r as Record<string, unknown>)['last_contacted_at'] as string) ?? null,
+        } as Lead;
+      });
 
       setLeads(mappedLeads);
 
@@ -212,11 +307,10 @@ export default function Home() {
           mappedLeads.find((l) => l.status === "HOT") || mappedLeads[0];
         setSelectedLead(firstHot);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error loading leads:", err);
-      setMessage(
-        `Error loading leads: ${err.message || "Unknown error"}`
-      );
+      const msg = err instanceof Error ? err.message : String(err);
+      setMessage(`Error loading leads: ${msg || "Unknown error"}`);
       setLeads([]);
     } finally {
       setLoadingLeads(false);
@@ -242,9 +336,96 @@ export default function Home() {
 
     // TEMP: show all messages while we confirm schema
     setConversation((data || []) as MessageRow[]);
+
+    // After messages render, schedule a double requestAnimationFrame to ensure
+    // layout is settled before scrolling. Use a direct scroll here to avoid
+    // adding `scrollToBottom` to the callback deps.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const el = messagesEndRef.current;
+        if (!el) return;
+        try {
+          el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+        } catch {
+          el.scrollTop = el.scrollHeight;
+        }
+      }),
+    );
   },
   []
 );
+
+  // Snooze handlers
+  const handleSnooze = async (targetDate: Date) => {
+    if (!selectedLead) return;
+    setSnoozeLoading(true);
+    const prevStatus = selectedLead.status ?? null;
+    try {
+      const iso = targetDate.toISOString();
+      const { error } = await supabase
+        .from("leads")
+        .update({ nurture_locked_until: iso, nurture_status: "SNOOZED" })
+        .eq("id", selectedLead.id)
+        .select();
+
+      if (error) {
+        console.error("Snooze update error:", error);
+        setMessage(`Error snoozing lead: ${error.message}`);
+        return;
+      }
+
+      setMessage("Lead snoozed.");
+      // Refresh leads and clear selection (lead disappears)
+      await fetchLeads();
+      setSelectedLead(null);
+      // Setup undo payload + toast
+      setUndoPayload({ leadId: selectedLead.id, prevStatus });
+      // animate toast in
+      setUndoVisible(true);
+      // auto-hide after 6s (and clear payload after animation finishes)
+      window.setTimeout(() => {
+        setUndoVisible(false);
+        // give animation 250ms to finish then clear the payload
+        window.setTimeout(() => setUndoPayload(null), 300);
+      }, 6000);
+      setSnoozeOpen(false);
+    } catch (err: unknown) {
+      console.error("Error snoozing lead:", err);
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSnoozeLoading(false);
+    }
+  };
+
+  const handleSnoozePreset = (days: number) => {
+    const now = new Date();
+    const target = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    // set time to 09:00 local for convenience
+    target.setHours(9, 0, 0, 0);
+    handleSnooze(target);
+  };
+
+  const handleSnoozeCustom = async () => {
+    if (!snoozeCustomDate) return;
+    const d = new Date(snoozeCustomDate);
+    d.setHours(9, 0, 0, 0);
+    await handleSnooze(d);
+  };
+
+  const handleUndoSnooze = async () => {
+    if (!undoPayload) return;
+    try {
+      const { leadId, prevStatus } = undoPayload;
+      await supabase.from("leads").update({ nurture_locked_until: null, nurture_status: prevStatus ?? "NURTURE" }).eq("id", leadId);
+      setMessage("Snooze undone.");
+      await fetchLeads();
+      setUndoVisible(false);
+      setUndoPayload(null);
+    } catch (err: unknown) {
+      console.error("Error undoing snooze:", err);
+      setMessage(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   /* ------------------------------------------------------------------ */
   /* Actions                                                            */
@@ -290,14 +471,15 @@ export default function Home() {
     // Refresh leads so "Last contacted" etc stay in sync
     await fetchLeads();
 
-    const data = await res.json().catch(() => ({} as any));
+    const data = await res.json().catch(() => ({} as Record<string, unknown>));
 
     if (!res.ok) {
       console.error("reply-sms API returned error", res.status, data);
-      setMessage(
-        data?.error ||
-          `Error sending reply (status ${res.status}). Check server logs.`
-      );
+      const apiError =
+        data && typeof data === "object" && "error" in data && typeof (data as Record<string, unknown>)["error"] === "string"
+          ? ((data as Record<string, unknown>)["error"] as string)
+          : undefined;
+      setMessage(apiError || `Error sending reply (status ${res.status}). Check server logs.`);
       return;
     }
 
@@ -315,6 +497,10 @@ export default function Home() {
       } as MessageRow,
     ]);
 
+    // After local echo, immediately scroll so the user's message is visible
+    // Use double rAF to ensure DOM update has applied
+    requestAnimationFrame(() => requestAnimationFrame(() => scrollToBottom(true)));
+
     // Clear input
     setReplyText("");
 
@@ -322,16 +508,17 @@ export default function Home() {
     // The 5s polling effect will pick up the DB row when it exists.
     // If we call fetchMessages immediately and the DB isn’t updated yet,
     // we wipe out the locally-added message.
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error sending reply:", err);
-    setMessage(err?.message || "Error sending reply");
+    const msg = err instanceof Error ? err.message : String(err);
+    setMessage(msg || "Error sending reply");
   } finally {
     setSendingReply(false);
   }
 };
 
-  const addLead = async (e: FormEvent) => {
-  e.preventDefault();
+  const addLead = async (e?: FormEvent) => {
+  if (e) e.preventDefault();
   setLoading(true);
   setMessage(null);
 
@@ -360,49 +547,60 @@ export default function Home() {
       return;
     }
 
+    // Attempt to map the returned row and auto-select it
+    const inserted = Array.isArray(data) && data.length > 0 ? (data[0] as Record<string, unknown>) : null;
+
+    const newLead: Lead | null = inserted
+      ? {
+          id: (inserted.id as string) || "",
+          created_at: (inserted.created_at as string) ?? null,
+          name: (inserted.name as string) || "",
+          phone: (inserted.phone as string) || "",
+          email: (inserted.email as string) || "",
+          source: (inserted.source as string) ?? null,
+          status: (inserted.status as string) ?? null,
+          nurture_status: (inserted.nurture_status as string) ?? null,
+          nurture_stage: (inserted.nurture_stage as string) ?? null,
+          next_nurture_at: (inserted.next_nurture_at as string) ?? null,
+          last_nurture_sent_at: (inserted.last_nurture_sent_at as string) ?? null,
+          last_agent_sent_at: (inserted.last_agent_sent_at as string) ?? null,
+          nurture_locked_until: (inserted.nurture_locked_until as string) ?? null,
+          lastContactedAt: (inserted['last_contacted_at'] as string) ?? null,
+        }
+      : null;
+
     setName("");
     setPhone("");
     setEmail("");
     setMessage("Lead added successfully.");
 
+    // Refresh leads list and auto-select the newly created lead if available
     await fetchLeads();
-  } catch (err: any) {
+    if (newLead) {
+      setSelectedLead(newLead);
+      try {
+        await fetchMessages(newLead.id);
+      } catch {
+        // ignore fetchMessages errors — polling will pick up messages
+      }
+    }
+
+    // Close modal if open
+    setAddModalOpen(false);
+    return true;
+  } catch (err: unknown) {
     console.error("[addLead] Network / unknown error", err);
     // This is where "TypeError: Failed to fetch" will show if it’s truly network
-    setMessage(
-      `Network or unknown error adding lead: ${
-        err?.message || "Unknown error"
-      }`
-    );
+    const msg = err instanceof Error ? err.message : String(err);
+    setMessage(`Network or unknown error adding lead: ${msg || "Unknown error"}`);
   } finally {
     setLoading(false);
   }
+  return false;
 };
 
 
-  const sendTestSms = async () => {
-    try {
-      setSmsLoading(true);
-      setSmsMessage(null);
-
-      const res = await fetch("/api/test-sms", {
-        method: "POST",
-      });
-
-      const body = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(body.error || "Failed to send SMS");
-      }
-
-      setSmsMessage("Test SMS sent!");
-    } catch (err: any) {
-      console.error(err);
-      setSmsMessage(err.message || "Error sending test SMS");
-    } finally {
-      setSmsLoading(false);
-    }
-  };
+  // sendTestSms removed — test button UI removed from the conversation pane.
 
   /* ------------------------------------------------------------------ */
   /* Effects                                                            */
@@ -438,13 +636,109 @@ export default function Home() {
     };
   }, [selectedLead?.id, fetchMessages]);
 
+  // Observe scroll position to know whether the user is scrolled up
+  useEffect(() => {
+    const el = messagesEndRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      setIsScrolledUp(distanceFromBottom > SCROLL_THRESHOLD_PX);
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    // initialize
+    onScroll();
+
+    return () => el.removeEventListener("scroll", onScroll);
+     
+  }, []);
+
+  // Auto-scroll chat container to bottom whenever conversation updates
+  useEffect(() => {
+    // Use the central helper which obeys `isScrolledUp` and `autoScrollAlways`.
+    // Run in rAF to ensure DOM layout is ready.
+    requestAnimationFrame(() => {
+      scrollToBottom(false);
+    });
+  }, [conversation, scrollToBottom]);
+
+  // Focus the Quick Add name input when the quick-add panel opens
+  useEffect(() => {
+    if (!quickAddOpen) return;
+    requestAnimationFrame(() => {
+      quickAddNameRef.current?.focus();
+    });
+  }, [quickAddOpen]);
+
+  // Focus the modal name input when the Add Lead modal opens
+  useEffect(() => {
+    if (!addModalOpen) return;
+    requestAnimationFrame(() => {
+      modalNameRef.current?.focus();
+    });
+  }, [addModalOpen]);
+
+  // Ensure any prior status/message is cleared when either add UI opens
+  useEffect(() => {
+    if (quickAddOpen || addModalOpen) {
+      setMessage(null);
+    }
+  }, [quickAddOpen, addModalOpen]);
+
+  // Lead filtering + search for the left column
+  const filteredLeads = leads
+    .filter((l) => {
+      // Exclude actively snoozed leads (nurture_locked_until in future)
+      if (l.nurture_locked_until) {
+        const locked = new Date(l.nurture_locked_until);
+        if (locked.getTime() > Date.now()) return false;
+      }
+
+      // Filter by tab
+      if (leadFilter === "HOT" && l.status !== "HOT") return false;
+      if (leadFilter === "NURTURE" && l.status !== "NURTURE") return false;
+
+      // Search by name / phone / email
+      if (!searchTerm) return true;
+      const s = searchTerm.toLowerCase();
+      return (
+        (l.name || "").toLowerCase().includes(s) ||
+        (l.phone || "").toLowerCase().includes(s) ||
+        (l.email || "").toLowerCase().includes(s)
+      );
+    })
+    // Bring recently-expired snoozes to the top
+    .sort((a, b) => {
+      const aExpired = !!a.nurture_locked_until && new Date(a.nurture_locked_until).getTime() <= Date.now() && a.nurture_status === "SNOOZED";
+      const bExpired = !!b.nurture_locked_until && new Date(b.nurture_locked_until).getTime() <= Date.now() && b.nurture_status === "SNOOZED";
+      if (aExpired && !bExpired) return -1;
+      if (!aExpired && bExpired) return 1;
+      // fallback to created_at desc
+      const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return bt - at;
+    });
+
+  // Snooze badges counts
+  const snoozedCount = leads.filter((l) => l.nurture_locked_until && new Date(l.nurture_locked_until).getTime() > Date.now()).length;
+  const expiredSnoozeCount = leads.filter((l) => l.nurture_locked_until && new Date(l.nurture_locked_until).getTime() <= Date.now() && l.nurture_status === "SNOOZED").length;
+
+  // Modal submit helper
+  const handleModalSubmit = async (e: FormEvent) => {
+    const ok = await addLead(e);
+    if (ok) {
+      setAddModalOpen(false);
+    }
+  };
+
   /* ------------------------------------------------------------------ */
   /* Render                                                             */
   /* ------------------------------------------------------------------ */
 
   return (
     <>
-      <Header />
+      <Header onHeightChange={setHeaderHeight} />
 
       <main
         style={{
@@ -458,73 +752,117 @@ export default function Home() {
           backgroundColor: "#020617",
         }}
       >
-        {/* Title + stats */}
-        <div style={{ marginBottom: "1.75rem" }}>
-          <h1
-            style={{
-              fontSize: "2rem",
-              fontWeight: 600,
-              marginBottom: "0.25rem",
-            }}
-          >
-            Leads Dashboard
-          </h1>
-          <p
-            style={{
-              color: "#b4b4b4",
-              fontSize: "0.95rem",
-              marginBottom: "0.75rem",
-            }}
-          >
-            Your active pipeline
-          </p>
-
-          <div
-            style={{
-              display: "flex",
-              gap: "1rem",
-              flexWrap: "wrap",
-              fontSize: "0.85rem",
-            }}
-          >
-            <span
+        {/* Title + stats + snooze control */}
+        <div style={{ marginBottom: "1.75rem", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
+          <div style={{ flex: 1 }}>
+            <h1
               style={{
-                backgroundColor: "rgba(255, 99, 71, 0.08)",
-                padding: "0.35rem 0.75rem",
-                borderRadius: "0.75rem",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.35rem",
+                fontSize: "2rem",
+                fontWeight: 600,
+                marginBottom: "0.25rem",
               }}
             >
-              🔥 {leads.filter((l) => l.status === "HOT").length} Hot
-            </span>
-
-            <span
+              Leads Dashboard
+            </h1>
+            <p
               style={{
-                backgroundColor: "rgba(16, 185, 129, 0.08)",
-                padding: "0.35rem 0.75rem",
-                borderRadius: "0.75rem",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.35rem",
+                color: "#b4b4b4",
+                fontSize: "0.95rem",
+                marginBottom: "0.75rem",
               }}
             >
-              🌱 {leads.filter((l) => l.status === "NURTURE").length} Nurture
-            </span>
+              Your active pipeline
+            </p>
 
-            <span
+            <div
               style={{
-                backgroundColor: "rgba(148, 163, 184, 0.08)",
-                padding: "0.35rem 0.75rem",
-                borderRadius: "0.75rem",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.35rem",
+                display: "flex",
+                gap: "1rem",
+                flexWrap: "wrap",
+                fontSize: "0.85rem",
               }}
             >
-              📊 {leads.length} Total
-            </span>
+              <span
+                style={{
+                  backgroundColor: "rgba(255, 99, 71, 0.08)",
+                  padding: "0.35rem 0.75rem",
+                  borderRadius: "0.75rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                }}
+              >
+                🔥 {leads.filter((l) => l.status === "HOT").length} Hot
+              </span>
+
+              <span
+                style={{
+                  backgroundColor: "rgba(16, 185, 129, 0.08)",
+                  padding: "0.35rem 0.75rem",
+                  borderRadius: "0.75rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                }}
+              >
+                🌱 {leads.filter((l) => l.status === "NURTURE").length} Nurture
+              </span>
+
+              <span
+                style={{
+                  backgroundColor: "rgba(148, 163, 184, 0.08)",
+                  padding: "0.35rem 0.75rem",
+                  borderRadius: "0.75rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                }}
+              >
+                📊 {leads.length} Total
+                {(snoozedCount > 0 || expiredSnoozeCount > 0) && (
+                  <span style={{ marginLeft: "0.35rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                    <span style={{ fontSize: "0.75rem", padding: "0.15rem 0.4rem", borderRadius: "999px", backgroundColor: expiredSnoozeCount > 0 ? "#f59e0b" : "#3b82f6", color: "#fff" }}>
+                      {expiredSnoozeCount > 0 ? `${expiredSnoozeCount}⚠` : `${snoozedCount}`}
+                    </span>
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <button
+              ref={snoozeButtonRef}
+              type="button"
+              onClick={() => {
+                // compute popover position relative to button
+                if (snoozeButtonRef.current) {
+                  const rect = snoozeButtonRef.current.getBoundingClientRect();
+                  const popWidth = 260;
+                  // If popover would overflow the right edge, anchor to the button's left
+                  let left = rect.right - popWidth;
+                  if (rect.right + 16 > window.innerWidth) {
+                    left = rect.left;
+                  }
+                  left = Math.max(8, left + window.scrollX);
+                  const top = rect.bottom + 8 + window.scrollY;
+                  setSnoozePopoverPos({ left, top });
+                }
+                setSnoozeOpen((v) => !v);
+              }}
+              disabled={!selectedLead}
+              title={selectedLead ? "Snooze selected lead" : "Select a lead to snooze"}
+              style={{
+                padding: "0.45rem 0.75rem",
+                borderRadius: "0.6rem",
+                border: "1px solid #374151",
+                backgroundColor: !selectedLead ? "transparent" : "rgba(37,99,235,0.9)",
+                color: !selectedLead ? "#6b7280" : "#fff",
+                cursor: !selectedLead ? "default" : "pointer",
+              }}
+            >
+              ⏰ Snooze
+            </button>
           </div>
         </div>
 
@@ -537,268 +875,405 @@ export default function Home() {
             alignItems: "stretch",
           }}
         >
-          {/* LEFT COLUMN */}
+          {/* Snooze popover (anchored top-right) */}
+          {snoozeOpen && (
+            <div
+              role="dialog"
+              aria-modal="false"
+              style={{
+                position: "absolute",
+                left: snoozePopoverPos ? `${snoozePopoverPos.left}px` : undefined,
+                top: snoozePopoverPos ? `${snoozePopoverPos.top}px` : undefined,
+                right: snoozePopoverPos ? undefined : "1rem",
+                zIndex: 300,
+                background: "#071023",
+                border: "1px solid #374151",
+                padding: "0.75rem",
+                borderRadius: "0.5rem",
+                width: "260px",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.6)",
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: "0.5rem" }}>Snooze lead</div>
+              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                <button type="button" onClick={() => handleSnoozePreset(1)} style={{ flex: 1, padding: "0.4rem", borderRadius: "0.4rem", background: "rgba(55,65,81,0.6)", color: "#fff", border: "1px solid #374151" }}>
+                  Tomorrow
+                </button>
+                <button type="button" onClick={() => handleSnoozePreset(3)} style={{ flex: 1, padding: "0.4rem", borderRadius: "0.4rem", background: "rgba(55,65,81,0.6)", color: "#fff", border: "1px solid #374151" }}>
+                  3 days
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                <button type="button" onClick={() => handleSnoozePreset(7)} style={{ flex: 1, padding: "0.4rem", borderRadius: "0.4rem", background: "rgba(55,65,81,0.6)", color: "#fff", border: "1px solid #374151" }}>
+                  Next week
+                </button>
+                <button type="button" onClick={() => { setSnoozeCustomDate(""); }} style={{ flex: 1, padding: "0.4rem", borderRadius: "0.4rem", background: "transparent", color: "#9ca3af", border: "1px solid #374151" }}>
+                  Custom
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.5rem" }}>
+                <input type="date" value={snoozeCustomDate} onChange={(e) => setSnoozeCustomDate(e.target.value)} style={{ flex: 1, padding: "0.35rem", borderRadius: "0.4rem", border: "1px solid #374151", background: "rgba(15,23,42,0.9)", color: "#f9fafb" }} />
+                <button type="button" onClick={handleSnoozeCustom} disabled={snoozeLoading || !snoozeCustomDate} style={{ padding: "0.4rem", borderRadius: "0.4rem", background: snoozeLoading ? "rgba(55,65,81,0.6)" : "rgba(37,99,235,0.9)", color: "#fff", border: "1px solid #374151" }}>
+                  Snooze
+                </button>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
+                <button type="button" onClick={() => setSnoozeOpen(false)} style={{ padding: "0.35rem 0.5rem", borderRadius: "0.4rem", background: "transparent", color: "#9ca3af", border: "1px solid #374151" }}>
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Undo toast */}
+          {undoPayload && (
+            <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 400 }}>
+              <div
+                aria-live="polite"
+                style={{
+                  background: '#0b1220',
+                  color: '#fff',
+                  padding: '0.6rem 0.8rem',
+                  borderRadius: '0.5rem',
+                  border: '1px solid #374151',
+                  display: 'flex',
+                  gap: '0.5rem',
+                  alignItems: 'center',
+                  // transition for subtle slide/fade
+                  transition: 'opacity 220ms ease, transform 220ms ease',
+                  opacity: undoVisible ? 1 : 0,
+                  transform: undoVisible ? 'translateY(0)' : 'translateY(12px)',
+                }}
+              >
+                <div>Lead snoozed</div>
+                <button onClick={handleUndoSnooze} style={{ padding: '0.35rem 0.55rem', borderRadius: '0.4rem', background: 'rgba(59,130,246,0.9)', color: '#fff', border: '1px solid #374151' }}>Undo</button>
+              </div>
+            </div>
+          )}
+          {/* LEFT COLUMN: Search + Filters + Lead list */}
           <div
             style={{
               flex: 1,
               display: "flex",
               flexDirection: "column",
-              gap: "1.5rem",
+              gap: "1rem",
+              minHeight: headerHeight ? `calc(100vh - ${headerHeight}px - 120px)` : "50vh",
             }}
           >
-            {/* HOT List */}
-            <section
-              style={{
-                padding: "1.5rem",
-                borderRadius: "1rem",
-                border: "1px solid #1f2937",
-              }}
-            >
-              <h2 style={{ marginBottom: "0.75rem" }}>Leads to Call Now (HOT)</h2>
+            {/* Search + Tabs */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search leads by name, phone, or email"
+                style={{
+                  width: "100%",
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: "0.5rem",
+                  border: "1px solid #374151",
+                  backgroundColor: "rgba(15,23,42,0.9)",
+                  color: "#f9fafb",
+                }}
+              />
 
-              {loadingLeads ? (
-                <p>Loading leads...</p>
-              ) : leads.filter((l) => l.status === "HOT").length === 0 ? (
-                <p>No HOT leads yet.</p>
-              ) : (
-                <ul
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button
+                  type="button"
+                  onClick={() => setLeadFilter("HOT")}
                   style={{
-                    listStyle: "none",
-                    padding: 0,
-                    margin: 0,
+                    padding: "0.35rem 0.75rem",
+                    borderRadius: "999px",
+                    border: leadFilter === "HOT" ? "1px solid #f59e0b" : "1px solid #374151",
+                    backgroundColor: leadFilter === "HOT" ? "rgba(245,158,11,0.08)" : "transparent",
+                    color: leadFilter === "HOT" ? "#fbbf24" : "#9ca3af",
+                    cursor: "pointer",
                   }}
                 >
-                  {leads
-                    .filter((l) => l.status === "HOT")
-                    .map((lead) => {
-                      const isSelected = selectedLead?.id === lead.id;
+                  🔥 Hot
+                </button>
 
-                      return (
-                        <li
-                          key={lead.id}
-                          onClick={() => handleSelectLead(lead)}
-                          style={{
-                            padding: "0.75rem 1rem",
-                            borderRadius: "0.75rem",
-                            border: "1px solid #374151",
-                            marginBottom: "0.5rem",
-                            cursor: "pointer",
-                            backgroundColor: isSelected
-                              ? "rgba(251, 191, 36, 0.05)"
-                              : "rgba(15, 23, 42, 0.6)",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                            }}
-                          >
-                            <div>
-                              <strong>{lead.name || "Unnamed lead"}</strong>
-                              <div
-                                style={{
-                                  fontSize: "0.85rem",
-                                  opacity: 0.9,
-                                }}
-                              >
-                                {lead.phone}
-                              </div>
-                              {lead.email && (
-                                <div
-                                  style={{
-                                    fontSize: "0.8rem",
-                                    opacity: 0.8,
-                                  }}
-                                >
-                                  {lead.email}
-                                </div>
-                              )}
-                            </div>
+                <button
+                  type="button"
+                  onClick={() => setLeadFilter("NURTURE")}
+                  style={{
+                    padding: "0.35rem 0.75rem",
+                    borderRadius: "999px",
+                    border: leadFilter === "NURTURE" ? "1px solid #10b981" : "1px solid #374151",
+                    backgroundColor: leadFilter === "NURTURE" ? "rgba(16,185,129,0.06)" : "transparent",
+                    color: leadFilter === "NURTURE" ? "#6ee7b7" : "#9ca3af",
+                    cursor: "pointer",
+                  }}
+                >
+                  🌱 Nurture
+                </button>
 
+                <button
+                  type="button"
+                  onClick={() => setLeadFilter("ALL")}
+                  style={{
+                    padding: "0.35rem 0.75rem",
+                    borderRadius: "999px",
+                    border: leadFilter === "ALL" ? "1px solid #94a3b8" : "1px solid #374151",
+                    backgroundColor: leadFilter === "ALL" ? "rgba(148,163,184,0.06)" : "transparent",
+                    color: leadFilter === "ALL" ? "#cbd5e1" : "#9ca3af",
+                    cursor: "pointer",
+                  }}
+                >
+                  All
+                </button>
+              </div>
+            </div>
+
+            {/* Lead list (scrollable) */}
+            <section
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                padding: "0.75rem",
+                borderRadius: "1rem",
+                border: "1px solid #1f2937",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.5rem",
+              }}
+            >
+              {loadingLeads ? (
+                <p>Loading leads...</p>
+              ) : filteredLeads.length === 0 ? (
+                <p style={{ color: "#9ca3af" }}>No leads match your filters.</p>
+              ) : (
+                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                  {filteredLeads.map((lead) => {
+                    const isSelected = selectedLead?.id === lead.id;
+                    return (
+                      <li
+                        key={lead.id}
+                        onClick={() => handleSelectLead(lead)}
+                        style={{
+                          padding: "0.75rem 1rem",
+                          borderRadius: "0.75rem",
+                          border: "1px solid #374151",
+                          marginBottom: "0.5rem",
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          backgroundColor: isSelected ? "rgba(59,130,246,0.06)" : "rgba(15,23,42,0.6)",
+                        }}
+                      >
+                        <div>
+                          <strong>{lead.name || "Unnamed lead"}</strong>
+                          <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>{lead.phone}</div>
+                          {lead.email && <div style={{ fontSize: "0.8rem", opacity: 0.8 }}>{lead.email}</div>}
+                        </div>
+
+                        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                             <StatusPill status={lead.status} />
+                            {lead.nurture_locked_until && new Date(lead.nurture_locked_until).getTime() <= Date.now() && (
+                              <span style={{ fontSize: '0.7rem', color: '#f59e0b', padding: '0.25rem 0.5rem', borderRadius: '0.4rem', border: '1px solid rgba(245,158,11,0.18)' }}>
+                                Snooze expired
+                              </span>
+                            )}
                           </div>
-                        </li>
-                      );
-                    })}
+                          <div style={{ fontSize: "0.75rem", color: "#9ca3af" }}>{lead.source || "-"}</div>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </section>
 
-            {/* Add Lead */}
-            <section
-              style={{
-                padding: "1.5rem",
-                borderRadius: "1rem",
-                border: "1px solid #1f2937",
-              }}
-            >
-              <h2 style={{ marginBottom: "0.75rem" }}>Add Lead</h2>
+            {/* Quick Add controls + Add Lead button (modal) */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMessage(null);
+                    setQuickAddOpen((v) => !v);
+                  }}
+                  style={{
+                    padding: "0.45rem 0.85rem",
+                    borderRadius: "0.6rem",
+                    border: "1px solid #374151",
+                    backgroundColor: quickAddOpen ? "rgba(55,65,81,0.6)" : "transparent",
+                    color: "#f9fafb",
+                    cursor: "pointer",
+                  }}
+                >
+                  {quickAddOpen ? "Close Quick Add" : "Quick Add"}
+                </button>
 
-              <form onSubmit={addLead}>
-                <div style={{ marginBottom: "0.75rem" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMessage(null);
+                    setAddModalOpen(true);
+                  }}
+                  style={{
+                    padding: "0.45rem 0.85rem",
+                    borderRadius: "0.6rem",
+                    border: "1px solid #374151",
+                    backgroundColor: "rgba(37,99,235,0.9)",
+                    color: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  + Add Lead
+                </button>
+              </div>
+
+              {quickAddOpen && (
+                <form
+                  onSubmit={async (evt) => {
+                    evt.preventDefault();
+                    const ok = await addLead();
+                    if (ok) {
+                      setQuickAddOpen(false);
+                    }
+                  }}
+                  style={{ display: "flex", gap: "0.5rem", alignItems: "center", justifyContent: "center" }}
+                >
                   <input
+                    ref={quickAddNameRef}
                     type="text"
                     placeholder="Name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "0.6rem 0.75rem",
-                      borderRadius: "0.75rem",
-                      border: "1px solid #374151",
-                      backgroundColor: "rgba(15, 23, 42, 0.9)",
-                      color: "#f9fafb",
-                    }}
+                    style={{ padding: "0.45rem 0.6rem", borderRadius: "0.5rem", border: "1px solid #374151", backgroundColor: "rgba(15,23,42,0.9)", color: "#f9fafb", width: "40%" }}
                   />
-                </div>
 
-                <div style={{ marginBottom: "0.75rem" }}>
                   <input
                     type="text"
                     placeholder="Phone"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "0.6rem 0.75rem",
-                      borderRadius: "0.75rem",
-                      border: "1px solid #374151",
-                      backgroundColor: "rgba(15, 23, 42, 0.9)",
-                      color: "#f9fafb",
-                    }}
+                    style={{ padding: "0.45rem 0.6rem", borderRadius: "0.5rem", border: "1px solid #374151", backgroundColor: "rgba(15,23,42,0.9)", color: "#f9fafb", width: "35%" }}
                   />
-                </div>
 
-                <div style={{ marginBottom: "0.75rem" }}>
-                  <input
-                    type="email"
-                    placeholder="Email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "0.6rem 0.75rem",
-                      borderRadius: "0.75rem",
-                      border: "1px solid #374151",
-                      backgroundColor: "rgba(15, 23, 42, 0.9)",
-                      color: "#f9fafb",
-                    }}
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  style={{
-                    width: "100%",
-                    padding: "0.6rem 0.75rem",
-                    borderRadius: "0.75rem",
-                    border: "1px solid #374151",
-                    backgroundColor: loading
-                      ? "rgba(55, 65, 81, 0.6)"
-                      : "rgba(37, 99, 235, 0.9)",
-                    fontSize: "0.9rem",
-                    cursor: loading ? "default" : "pointer",
-                  }}
-                >
-                  {loading ? "Adding..." : "Add Lead"}
-                </button>
-
-                {message && (
-                  <p
-                    style={{
-                      marginTop: "0.5rem",
-                      fontSize: "0.8rem",
-                      color: "#9ca3af",
-                    }}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    style={{ padding: "0.45rem 0.75rem", borderRadius: "0.5rem", border: "1px solid #374151", backgroundColor: loading ? "rgba(55,65,81,0.6)" : "rgba(37,99,235,0.9)", color: "#fff", cursor: loading ? "default" : "pointer" }}
                   >
-                    {message}
-                  </p>
-                )}
-              </form>
-            </section>
+                    {loading ? "Adding..." : "Add"}
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
 
-     {/* RIGHT COLUMN – Conversation */}
-    <aside
-      style={{
-      flex: 1.2,
-      borderRadius: "1rem",
-      border: "1px solid #1f2937",
-      padding: "1.25rem 1.5rem 1.5rem",
-      display: "flex",
-      flexDirection: "column",
-      gap: "0.75rem",
-    }}
-  >
-   {/* Lead header row */}
-  <div
-      style={{
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      gap: "1rem",
-    }}
-  >
-    <div>
-      <p
-        style={{
-          margin: 0,
-          fontSize: "1rem",
-          fontWeight: 600,
-        }}
-      >
-        {selectedLead?.name || "No lead selected"}
-      </p>
+          {/* RIGHT COLUMN – Conversation */}
+          
+            <aside
+              style={{
+                flex: 1.2,
+                borderRadius: "1rem",
+               border: "1px solid #1f2937",
+               padding: "1rem 1.5rem 1.5rem", // less top padding
+               display: "flex",
+               flexDirection: "column",
+             }}
+            >
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-          marginTop: "0.25rem",
-        }}
-      >
-        <span style={{ color: "#aaa", fontSize: "0.8rem" }}>Status:</span>
-        <StatusPill status={selectedLead?.status || null} />
-      </div>
-    </div>
+            {/* Lead header */}
+            <p style={{ marginBottom: "0.25rem" }}>
+              <strong>{selectedLead?.name || "No lead selected"}</strong>
+            </p>
 
-    <button
-      type="button"
-      onClick={() => setAutomationPaused((prev) => !prev)}
-      disabled={!selectedLead}
-      style={{
-        fontSize: "0.75rem",
-        padding: "0.35rem 0.75rem",
-        borderRadius: "999px",
-        border: "1px solid #374151",
-        backgroundColor: automationPaused
-          ? "rgba(239, 68, 68, 0.15)"
-          : "rgba(16, 185, 129, 0.15)",
-        color: automationPaused ? "#fecaca" : "#6ee7b7",
-        cursor: !selectedLead ? "default" : "pointer",
-        opacity: !selectedLead ? 0.4 : 1,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {automationPaused ? "⏸ Automation Paused" : "🟢 Automation Active"}
-    </button>
-  </div>
+            <div style={{ marginBottom: "0.75rem" }}>
+              <span style={{ color: "#aaa", marginRight: "0.5rem" }}>
+                Status:
+              </span>
+              <StatusPill status={selectedLead?.status || null} />
+            </div>
 
-  {/* ⬇️ keep your existing messages container + reply form right after this div */}
-  <div
-  style={{
-    borderRadius: "0.75rem",
-    border: "1px solid #444",
-    padding: "0.75rem 1rem",
-    maxHeight: "260px",
-    overflowY: "auto",
-    marginBottom: "0.75rem",
-  }}
->
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+              <button
+                type="button"
+                onClick={() => setAutomationPaused((prev) => !prev)}
+                disabled={!selectedLead}
+                style={{
+                  fontSize: "0.75rem",
+                  padding: "0.35rem 0.75rem",
+                  borderRadius: "999px",
+                  border: "1px solid #374151",
+                  backgroundColor: automationPaused
+                    ? "rgba(239, 68, 68, 0.15)"
+                    : "rgba(16, 185, 129, 0.15)",
+                  color: automationPaused ? "#fecaca" : "#6ee7b7",
+                  cursor: !selectedLead ? "default" : "pointer",
+                  opacity: !selectedLead ? 0.4 : 1,
+                }}
+              >
+                {automationPaused ? "⏸ Automation Paused" : "🟢 Automation Active"}
+              </button>
+
+              
+            </div>
+
+              {/* Jump to latest + auto-scroll mode controls */}
+              <div style={{ display: "inline-flex", gap: "0.5rem", alignItems: "center", marginLeft: "0.5rem" }}>
+                {isScrolledUp && (
+                  <button
+                    type="button"
+                    onClick={() => scrollToBottom(true)}
+                    title="Jump to latest message"
+                    aria-label="Jump to latest message"
+                    style={{
+                      fontSize: "0.75rem",
+                      padding: "0.35rem 0.6rem",
+                      borderRadius: "999px",
+                      border: "1px solid #374151",
+                      backgroundColor: "rgba(59,130,246,0.9)",
+                      color: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ⬇ Jump to Latest
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setAutoScrollAlways((v) => !v)}
+                  title={autoScrollAlways ? "Auto-scroll: always" : "Auto-scroll: only when near bottom"}
+                  aria-pressed={autoScrollAlways}
+                  aria-label="Toggle auto-scroll behavior"
+                  style={{
+                    fontSize: "0.7rem",
+                    padding: "0.25rem 0.5rem",
+                    borderRadius: "999px",
+                    border: "1px solid #374151",
+                    backgroundColor: autoScrollAlways ? "rgba(16,185,129,0.15)" : "rgba(55,65,81,0.4)",
+                    color: autoScrollAlways ? "#6ee7b7" : "#9ca3af",
+                    cursor: "pointer",
+                  }}
+                >
+                  {autoScrollAlways ? "Auto: Always" : "Auto: Near Bottom"}
+                </button>
+              </div>
+
+            <div
+          style={{
+            flex: 1,
+            borderRadius: "0.75rem",
+            border: "1px solid #444",
+            padding: "0.75rem 1rem",
+            minHeight: headerHeight ? `calc(100vh - ${headerHeight}px - 120px)` : "50vh",
+            overflowY: "auto",
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.5rem",
+          }}
+          ref={messagesEndRef}
+        >
   {conversation.length === 0 ? (
     // EMPTY: timeline + “now you are here” + chips
     <div
@@ -855,9 +1330,7 @@ export default function Home() {
                 }}
               >
                 {selectedLead?.created_at &&
-                  new Date(
-                    selectedLead.created_at as any
-                  ).toLocaleTimeString("en-US", {
+                  new Date(selectedLead.created_at).toLocaleTimeString("en-US", {
                     hour: "numeric",
                     minute: "2-digit",
                   })}
@@ -1162,7 +1635,7 @@ export default function Home() {
                 </button>
               </form>
 
-                            <p
+              <p
                 style={{
                   fontSize: "0.8rem",
                   color: "#555",
@@ -1174,8 +1647,129 @@ export default function Home() {
                 conversation above.
               </p>
             </div>
+
+            {/* Test SMS button removed */}
           </aside>
         </div>
+        {/* Add Lead modal */}
+        {addModalOpen && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 200,
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              style={{
+                width: "min(720px, 96%)",
+                backgroundColor: "#071023",
+                padding: "1rem",
+                borderRadius: "0.75rem",
+                border: "1px solid #374151",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.6)",
+              }}
+            >
+              <h3 style={{ margin: 0, marginBottom: "0.5rem" }}>Add Lead</h3>
+
+              <form onSubmit={handleModalSubmit}>
+                <div style={{ marginBottom: "0.5rem" }}>
+                  <input
+                    ref={modalNameRef}
+                    type="text"
+                    placeholder="Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "0.5rem 0.75rem",
+                      borderRadius: "0.5rem",
+                      border: "1px solid #374151",
+                      backgroundColor: "rgba(15,23,42,0.9)",
+                      color: "#f9fafb",
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: "0.5rem" }}>
+                  <input
+                    type="text"
+                    placeholder="Phone"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "0.5rem 0.75rem",
+                      borderRadius: "0.5rem",
+                      border: "1px solid #374151",
+                      backgroundColor: "rgba(15,23,42,0.9)",
+                      color: "#f9fafb",
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: "0.5rem" }}>
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "0.5rem 0.75rem",
+                      borderRadius: "0.5rem",
+                      border: "1px solid #374151",
+                      backgroundColor: "rgba(15,23,42,0.9)",
+                      color: "#f9fafb",
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "0.5rem" }}>
+                  <button
+                    type="button"
+                    onClick={() => setAddModalOpen(false)}
+                    style={{
+                      padding: "0.45rem 0.75rem",
+                      borderRadius: "0.5rem",
+                      border: "1px solid #374151",
+                      backgroundColor: "transparent",
+                      color: "#9ca3af",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    style={{
+                      padding: "0.45rem 0.9rem",
+                      borderRadius: "0.5rem",
+                      border: "1px solid #374151",
+                      backgroundColor: loading ? "rgba(55,65,81,0.6)" : "rgba(37,99,235,0.9)",
+                      color: "#fff",
+                      cursor: loading ? "default" : "pointer",
+                    }}
+                  >
+                    {loading ? "Adding..." : "Add Lead"}
+                  </button>
+                </div>
+
+                {message && (
+                  <p style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "#9ca3af" }}>{message}</p>
+                )}
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* Responsive layout rules */}
         <style jsx>{`
@@ -1186,10 +1780,11 @@ export default function Home() {
           @media (max-width: 900px) {
             .ls-main-layout {
               flex-direction: column;
-            }
+}
           }
         `}</style>
       </main>
-    </>
+    </>            
   );
 }
+
