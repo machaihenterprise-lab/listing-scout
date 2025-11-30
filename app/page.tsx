@@ -1477,47 +1477,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Mobile-only compact header: visible when detail view is open */}
-            {isDetailViewOpen && (
-              <div className="ls-mobile-header md:hidden">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedLead(null)}
-                    style={{ padding: '0.25rem', borderRadius: '0.45rem', border: '1px solid #374151', background: 'transparent', color: '#cbd5e1' }}
-                  >
-                    ←
-                  </button>
-                  <div style={{ fontWeight: 600 }}>{selectedLead?.name || 'Conversation'}</div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{selectedLead?.phone}</div>
-                  <button
-                    type="button"
-                    onClick={handleToggleAutomation}
-                    disabled={!selectedLead}
-                    title={selectedLead ? (automationPaused ? 'Activate automation' : 'Pause automation') : 'Select a lead to change automation'}
-                    aria-pressed={automationPaused}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      padding: '0.25rem 0.5rem',
-                      borderRadius: '999px',
-                      fontSize: '0.75rem',
-                      backgroundColor: automationPaused ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
-                      color: automationPaused ? '#fecaca' : '#6ee7b7',
-                      border: '1px solid rgba(71,85,105,0.18)',
-                      backdropFilter: 'blur(4px)',
-                      cursor: selectedLead ? 'pointer' : 'default'
-                    }}
-                  >
-                    {automationPaused ? '⏸' : '🟢'}
-                  </button>
-                </div>
-              </div>
-            )}
-
             <div
               className="ls-conversation-container"
               style={{
@@ -2202,19 +2161,6 @@ export default function Home() {
               word-break: break-word;
             }
 
-            .ls-mobile-header {
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              gap: 0.75rem;
-              padding: 0.5rem 0;
-              border-bottom: 1px solid rgba(255,255,255,0.03);
-              background: linear-gradient(180deg, rgba(7,16,35,0.98), rgba(7,16,35,0.95));
-              position: sticky;
-              top: 0;
-              z-index: 40;
-            }
-
             /* Make the reply form fixed at bottom on small screens for easy access */
             /* Only fix the reply bar wrapper when the detail view is open on mobile */
             .detail-open .ls-reply-form {
@@ -2228,10 +2174,10 @@ export default function Home() {
               display: block;
             }
 
-            /* When detail is open on mobile, give the conversation area more vertical space */
+            /* When detail is open on mobile, let the conversation area fill most of the viewport above the fixed reply bar */
             .detail-open .ls-conversation-container {
-              height: calc(100vh - 196px);
-              max-height: calc(100vh - 196px);
+              height: calc(100vh - 140px);
+              max-height: calc(100vh - 140px);
             }
 
             .detail-open .ls-reply-form form {
