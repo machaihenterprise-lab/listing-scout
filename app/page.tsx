@@ -1151,7 +1151,7 @@ export default function Home() {
           )}
           {/* LEFT COLUMN: Search + Filters + Lead list */}
           <div
-            className={`h-full ${isDetailViewOpen ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
+            className="h-full flex flex-col"
             style={{
               flex: 1,
               gap: "1rem",
@@ -1386,10 +1386,9 @@ export default function Home() {
             </div>
           </div>
 
-          {/* RIGHT COLUMN – Conversation */}
-          {!(isMobile && !isDetailViewOpen) && (
+            {/* RIGHT COLUMN – Conversation */}
             <aside
-                  className={`h-full ${isDetailViewOpen ? 'flex w-full flex-col' : 'hidden md:flex md:flex-col'}`}
+              className="h-full flex w-full flex-col"
                   style={{
                     flex: 1.2,
                     borderRadius: "1rem",
@@ -1976,7 +1975,6 @@ export default function Home() {
 
             {/* Test SMS button removed */}
           </aside>
-          )}
         </div>
         {/* Add Lead modal */}
         {addModalOpen && (
