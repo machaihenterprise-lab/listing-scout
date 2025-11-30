@@ -1063,7 +1063,7 @@ export default function Home() {
             </div>
         </div>
 
-        {/* Main layout: stacked on mobile, side-by-side on md+ */}
+        {/* Main layout: on mobile, conversation first then lead/add-lead below; side-by-side on md+ */}
         <div
           className={`ls-main-layout h-screen flex flex-col md:flex-row ${isDetailViewOpen ? 'detail-open' : ''}`}
           style={{
@@ -1149,9 +1149,9 @@ export default function Home() {
               </div>
             </div>
           )}
-          {/* LEFT COLUMN: Search + Filters + Lead list */}
+          {/* LEFT COLUMN: Search + Filters + Lead list (mobile: rendered after conversation) */}
           <div
-            className="h-full flex flex-col"
+            className="h-full flex flex-col md:order-1 order-2"
             style={{
               flex: 1,
               gap: "1rem",
@@ -1386,9 +1386,9 @@ export default function Home() {
             </div>
           </div>
 
-            {/* RIGHT COLUMN – Conversation */}
-            <aside
-              className="h-full flex w-full flex-col"
+              {/* RIGHT COLUMN – Conversation (mobile: shown first) */}
+              <aside
+                className="h-full flex w-full flex-col md:order-2 order-1"
                   style={{
                     flex: 1.2,
                     borderRadius: "1rem",
