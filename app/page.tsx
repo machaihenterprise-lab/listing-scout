@@ -1482,11 +1482,9 @@ export default function Home() {
               style={{
                 position: 'relative',
                 flex: 1,
-                minHeight: 0,
                 borderRadius: "0.75rem",
                 border: "1px solid #444",
-                padding: "0.75rem 1rem",
-                paddingBottom: "3.25rem", // slightly more room for content vs input
+                padding: "0.75rem 1rem 1rem 1rem",
                 overflowY: "auto",
                 display: "flex",
                 flexDirection: "column",
@@ -2161,64 +2159,9 @@ export default function Home() {
               word-break: break-word;
             }
 
-            /* Make the reply form fixed at bottom on small screens for easy access */
-            /* Only fix the reply bar wrapper when the detail view is open on mobile */
-            .detail-open .ls-reply-form {
-              position: fixed;
-              left: 0;
-              right: 0;
-              bottom: calc(0px + env(safe-area-inset-bottom));
-              padding: 12px;
-              background: linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.96));
-              z-index: 300;
-              display: block;
-            }
-
-            /* When detail is open on mobile, let the conversation area fill most of the viewport above the fixed reply bar */
-            .detail-open .ls-conversation-container {
-              height: calc(100vh - 140px);
-              max-height: calc(100vh - 140px);
-            }
-
-            .detail-open .ls-reply-form form {
-              width: min(980px, calc(100% - 24px));
-              margin: 0 auto;
-              display: flex;
-              gap: 0.5rem;
-              align-items: center;
-            }
-
-            /* When detail is NOT open, keep the reply form static/relative so it doesn't float over the master list */
-            :not(.detail-open) .ls-reply-form {
-              position: relative;
-              padding: 0;
-              background: transparent;
-            }
-
-            .ls-reply-form form input[type="text"] {
-              font-size: 1rem;
-              padding: 0.65rem 0.85rem;
-              border-radius: 999px;
-            }
-
-            .ls-reply-form form button[type="submit"] {
-              padding: 0.6rem 0.95rem;
-            }
-
-            /* Slightly reduce left column visual density on mobile */
-            .ls-main-layout > div:first-child {
-              padding-bottom: 6rem;
-            }
-
-            /* Make sure message list can scroll under the fixed input without being clipped */
-            .ls-conversation-container {
-              -webkit-overflow-scrolling: touch;
-            }
-
-            /* On mobile, limit the lead list to show ~4 items and make it scrollable */
+            /* Make sure message + lead lists scroll nicely on mobile */
+            .ls-conversation-container,
             .ls-lead-list {
-              max-height: 360px; /* approx 4 items */
-              overflow-y: auto;
               -webkit-overflow-scrolling: touch;
             }
           }
