@@ -18,7 +18,7 @@ export default async function Page() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   // simple cookie-based protection: user must sign in via the login form to get cookie
-  const ck = cookies();
+  const ck = await cookies();
   const isAdmin = Boolean(ck.get("listing_scout_admin"));
 
   if (!isAdmin) {

@@ -36,7 +36,7 @@ export async function POST(req: Request) {
           Accept: "application/json",
         },
       }),
-      fetch(leadsRes ?? leadsUrl, {
+      fetch(leadsUrl, {
         headers: {
           apikey: serviceKey,
           Authorization: `Bearer ${serviceKey}`,
