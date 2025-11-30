@@ -1150,15 +1150,14 @@ export default function Home() {
             </div>
           )}
           {/* LEFT COLUMN: Search + Filters + Lead list */}
-          {!(isMobile && isDetailViewOpen) && (
-            <div
-              className={`h-full ${isDetailViewOpen ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
-              style={{
-                flex: 1,
-                gap: "1rem",
-                height: '100%'
-              }}
-            >
+          <div
+            className={`h-full ${isDetailViewOpen ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
+            style={{
+              flex: 1,
+              gap: "1rem",
+              height: '100%'
+            }}
+          >
             {/* Search + Tabs */}
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               <input
@@ -1386,12 +1385,10 @@ export default function Home() {
               )}
             </div>
           </div>
-          )}
 
           {/* RIGHT COLUMN – Conversation */}
-          
-              {!(isMobile && !isDetailViewOpen) && (
-              <aside
+          {!(isMobile && !isDetailViewOpen) && (
+            <aside
                   className={`h-full ${isDetailViewOpen ? 'flex w-full flex-col' : 'hidden md:flex md:flex-col'}`}
                   style={{
                     flex: 1.2,
@@ -1978,7 +1975,8 @@ export default function Home() {
             </div>
 
             {/* Test SMS button removed */}
-          </aside>)}
+          </aside>
+          )}
         </div>
         {/* Add Lead modal */}
         {addModalOpen && (
