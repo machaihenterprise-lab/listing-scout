@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, {
   FormEvent,
@@ -26,6 +26,7 @@ type Lead = {
   nurture_locked_until?: string | null;
 
   lastContactedAt?: string | null; // mapped from last_contacted_at
+  has_unread_messages?: boolean | null;
 };
 
 type MessageRow = {
@@ -185,6 +186,7 @@ export default function Home() {
 
   // Pause automation toggle
   const [automationPaused, setAutomationPaused] = useState(false);
+  const [showPauseConfirm, setShowPauseConfirm] = useState(false);
 
   // Left column UI: search, filter, modal
   const [searchTerm, setSearchTerm] = useState("");
@@ -207,11 +209,39 @@ export default function Home() {
   const [undoPayload, setUndoPayload] = useState<null | { leadId: string; prevStatus: string | null }>(null);
   const [undoVisible, setUndoVisible] = useState(false);
 
-  // Header height provided by `Header` via `onHeightChange`
-  const [headerHeight, setHeaderHeight] = useState<number>(0);
+  // Header height provided by `Header` via `onHeightChange` (not used yet)
+
+  // Activity summary (While you were sleeping)
+  const [activity, setActivity] = useState<null | { nurtureTexts: number; newLeads: number; errors: number }>(null);
+  const [activityUpdatedAt, setActivityUpdatedAt] = useState<string | null>(null);
+  const hasActivity = !!activity && ((activity.nurtureTexts || 0) > 0 || (activity.newLeads || 0) > 0 || (activity.errors || 0) > 0);
 
   // Right column tab state (conversation vs notes)
-  const [rightTab, setRightTab] = useState<'conversation' | 'notes'>('conversation');
+  const [rightTab] = useState<'conversation' | 'notes'>('conversation');
+
+  // Mobile master/detail control: when a lead is selected we treat that
+  // as the "detail" view on small screens.
+  const isDetailViewOpen = !!selectedLead;
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 900px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', update);
+    } else if (typeof mq.addListener === 'function') {
+      mq.addListener(update);
+    }
+    return () => {
+      if (typeof mq.removeEventListener === 'function') {
+        mq.removeEventListener('change', update);
+      } else if (typeof mq.removeListener === 'function') {
+        mq.removeListener(update);
+      }
+    };
+  }, []);
 
   // Scroll behavior controls
   const SCROLL_THRESHOLD_PX = 150; // distance from bottom to consider "near bottom"
@@ -260,7 +290,7 @@ export default function Home() {
   const fetchLeads = useCallback(async () => {
     setLoadingLeads(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabase!
         .from("leads")
         .select("*")
         .order("created_at", { ascending: false });
@@ -298,6 +328,7 @@ export default function Home() {
           nurture_locked_until: (r.nurture_locked_until as string) ?? null,
 
           lastContactedAt: ((r as Record<string, unknown>)['last_contacted_at'] as string) ?? null,
+          has_unread_messages: (r.has_unread_messages as boolean) ?? false,
         } as Lead;
       });
 
@@ -324,9 +355,12 @@ export default function Home() {
   async (leadId: string) => {
     console.log("[fetchMessages] for lead", leadId);
 
-    const { data, error } = await supabase
+    // Query messages for the specific lead only so the conversation pane
+    // shows messages belonging to the selected lead (filter by lead_id).
+    const { data, error } = await supabase!
       .from("messages")
       .select("*")
+      .eq("lead_id", leadId)
       .order("created_at", { ascending: true });
 
     console.log("[fetchMessages] result", { error, data });
@@ -337,7 +371,6 @@ export default function Home() {
       return;
     }
 
-    // TEMP: show all messages while we confirm schema
     setConversation((data || []) as MessageRow[]);
 
     // After messages render, schedule a double requestAnimationFrame to ensure
@@ -365,7 +398,7 @@ export default function Home() {
     const prevStatus = selectedLead.status ?? null;
     try {
       const iso = targetDate.toISOString();
-      const { error } = await supabase
+      const { error } = await supabase!
         .from("leads")
         .update({ nurture_locked_until: iso, nurture_status: "SNOOZED" })
         .eq("id", selectedLead.id)
@@ -419,7 +452,7 @@ export default function Home() {
     if (!undoPayload) return;
     try {
       const { leadId, prevStatus } = undoPayload;
-      await supabase.from("leads").update({ nurture_locked_until: null, nurture_status: prevStatus ?? "NURTURE" }).eq("id", leadId);
+      await supabase!.from("leads").update({ nurture_locked_until: null, nurture_status: prevStatus ?? "NURTURE" }).eq("id", leadId);
       setMessage("Snooze undone.");
       await fetchLeads();
       setUndoVisible(false);
@@ -466,7 +499,7 @@ export default function Home() {
     });
 
     // Update last_contacted_at
-    await supabase
+    await supabase!
       .from("leads")
       .update({ last_contacted_at: new Date().toISOString() })
       .eq("id", selectedLead.id);
@@ -520,6 +553,82 @@ export default function Home() {
   }
 };
 
+  // Ghost variable preview: replace known placeholders like {first_name}
+  // with data from the selected lead so agents can confirm before sending.
+  const generatePreview = (text: string) => {
+    if (!text) return "";
+    // simple variable replacement
+    return text.replace(/\{(\w+)\}/g, (match, varName) => {
+      if (!selectedLead) return match;
+
+      switch (varName.toLowerCase()) {
+        case "first_name": {
+          const name = selectedLead.name || "";
+          const first = name.split(" ").filter(Boolean)[0] || name || "";
+          return first || "[first name]";
+        }
+        case "full_name":
+        case "name":
+          return selectedLead.name || "[name]";
+        case "phone":
+          return selectedLead.phone || "[phone]";
+        default:
+          // unknown variable: leave as-is so agent notices it
+          return match;
+      }
+    });
+  };
+
+  // Perform the automation toggle (updates DB + UI)
+  const performToggleAutomation = async (willPause: boolean) => {
+    if (!selectedLead) return;
+
+    const newStatus = willPause ? "PAUSED" : "ACTIVE";
+    // optimistic
+    setAutomationPaused(willPause);
+    setShowPauseConfirm(false);
+    setMessage(null);
+
+    try {
+      const { error } = await supabase!
+        .from("leads")
+        .update({ nurture_status: newStatus })
+        .eq("id", selectedLead.id);
+
+      if (error) {
+        console.error("Error updating nurture_status:", error);
+        setMessage(`Error updating automation: ${error.message || "Unknown"}`);
+        setAutomationPaused(!willPause);
+        return;
+      }
+
+      await fetchLeads();
+      setSelectedLead({ ...selectedLead, nurture_status: newStatus });
+      setMessage(willPause ? "Automation paused." : "Automation activated.");
+    } catch (err: unknown) {
+      console.error("Error toggling automation:", err);
+      setMessage(err instanceof Error ? err.message : String(err));
+      setAutomationPaused(!willPause);
+    }
+  };
+
+  // Click handler: if pausing, show confirmation; if activating, run immediately.
+  const handleToggleAutomation = () => {
+    if (!selectedLead) {
+      setMessage("Select a lead to change automation status.");
+      return;
+    }
+
+    const willPause = !automationPaused;
+    if (willPause) {
+      setShowPauseConfirm(true);
+      return;
+    }
+
+    // activating automation — do it immediately
+    void performToggleAutomation(false);
+  };
+
   const addLead = async (e?: FormEvent) => {
   if (e) e.preventDefault();
   setLoading(true);
@@ -528,7 +637,7 @@ export default function Home() {
   console.log("[addLead] submitting", { name, phone, email });
 
     try {
-    const { data, error } = await supabase
+    const { data, error } = await supabase!
       .from("leads")
       .insert({
         name,
@@ -610,16 +719,55 @@ export default function Home() {
   /* Effects                                                            */
   /* ------------------------------------------------------------------ */
 
-  // Load leads once on first render
+  // Activity polling helper: fetch counts since `ls:lastSeen` (fallback 24h)
+  const fetchActivity = useCallback(async () => {
+    try {
+      const lastSeen = (() => {
+        try {
+          const s = localStorage.getItem('ls:lastSeen');
+          if (s) return s;
+        } catch {}
+        return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      })();
+
+      const res = await fetch('/api/activity-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lastSeen }),
+      });
+
+      if (!res.ok) return;
+      const json = await res.json().catch(() => null);
+      if (json && json.ok && json.counts) {
+        setActivity({ nurtureTexts: json.counts.nurtureTexts || 0, newLeads: json.counts.newLeads || 0, errors: json.counts.errors || 0 });
+        setActivityUpdatedAt(new Date().toISOString());
+      }
+    } catch {
+      // ignore transient network errors
+    }
+  }, []);
+
+  // Load leads once on first render and start activity polling.
   useEffect(() => {
     fetchLeads();
-  }, [fetchLeads]);
+    // initial fetch
+    fetchActivity();
+
+    // Poll every 5 minutes so the activity card stays up-to-date.
+    const POLL_MS = 5 * 60 * 1000;
+    const id = window.setInterval(() => {
+      fetchActivity();
+    }, POLL_MS);
+
+    return () => window.clearInterval(id);
+  }, [fetchLeads, fetchActivity]);
 
   // When selected lead changes, un-pause automation
   useEffect(() => {
     if (!selectedLead?.id) return;
-    setAutomationPaused(false);
-  }, [selectedLead?.id]);
+    // Derive paused state from lead.nurture_status so UI reflects DB
+    setAutomationPaused((selectedLead.nurture_status || "").toUpperCase() === "PAUSED");
+  }, [selectedLead?.id, selectedLead?.nurture_status]);
 
   // When a lead is selected:
   // - load messages immediately
@@ -742,7 +890,7 @@ export default function Home() {
 
   return (
     <>
-      <Header onHeightChange={setHeaderHeight} />
+      <Header />
 
       <main
         style={{
@@ -870,11 +1018,55 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Main layout */}
+        {/* Activity summary ticker: shows what the bot did since lastSeen. */}
+        <div style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', padding: '0.75rem 1rem', borderRadius: '0.75rem', background: '#071025', border: '1px solid #1f2937' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                {hasActivity ? (
+                  <span aria-hidden className="ls-activity-badge" />
+                ) : null}
+
+                <div style={{ color: '#cbd5e1', fontSize: '0.95rem' }}>
+                  {activity ? (
+                    <div>
+                      <div>
+                        Since your last login: <strong style={{ color: '#93c5fd' }}>{activity.nurtureTexts}</strong> Nurture Texts Sent, <strong style={{ color: '#86efac' }}>{activity.newLeads}</strong> New Leads, <strong style={{ color: activity.errors > 0 ? '#fb7185' : '#94a3b8' }}>{activity.errors}</strong> Errors.
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+                        Last updated: {activityUpdatedAt ? formatShortDateTime(activityUpdatedAt) : '—'}
+                      </div>
+                    </div>
+                  ) : (
+                    <span>Loading activity summary…</span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      localStorage.setItem('ls:lastSeen', new Date().toISOString());
+                    } catch {}
+                    // re-fetch activity immediately so the UI clears
+                    try {
+                      fetchActivity();
+                      setActivityUpdatedAt(new Date().toISOString());
+                    } catch {}
+                  }}
+                  style={{ padding: '0.4rem 0.6rem', borderRadius: '0.5rem', border: '1px solid #374151', background: 'transparent', color: '#9ca3af', cursor: 'pointer' }}
+                >
+                  Mark read
+                </button>
+              </div>
+            </div>
+        </div>
+
+        {/* Main layout: stacked on mobile, side-by-side on md+ */}
         <div
-          className="ls-main-layout h-[85vh]"
+          className={`ls-main-layout h-screen flex flex-col md:flex-row ${isDetailViewOpen ? 'detail-open' : ''}`}
           style={{
-            display: "flex",
             gap: "1.5rem",
             alignItems: "stretch",
           }}
@@ -958,16 +1150,15 @@ export default function Home() {
             </div>
           )}
           {/* LEFT COLUMN: Search + Filters + Lead list */}
-          <div
-            className="h-full"
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              gap: "1rem",
-              height: '100%'
-            }}
-          >
+          {!(isMobile && isDetailViewOpen) && (
+            <div
+              className={`h-full ${isDetailViewOpen ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
+              style={{
+                flex: 1,
+                gap: "1rem",
+                height: '100%'
+              }}
+            >
             {/* Search + Tabs */}
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               <input
@@ -975,8 +1166,8 @@ export default function Home() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search leads by name, phone, or email"
+                className="w-full"
                 style={{
-                  width: "100%",
                   padding: "0.5rem 0.75rem",
                   borderRadius: "0.5rem",
                   border: "1px solid #374151",
@@ -1035,7 +1226,7 @@ export default function Home() {
 
             {/* Lead list (scrollable) */}
             <section
-              className="h-full overflow-y-auto"
+              className="h-full overflow-y-auto ls-lead-list"
               style={{
                 flex: 1,
                 padding: "0.75rem",
@@ -1061,17 +1252,39 @@ export default function Home() {
                         style={{
                           padding: "0.75rem 1rem",
                           borderRadius: "0.75rem",
-                          border: "1px solid #374151",
                           marginBottom: "0.5rem",
                           cursor: "pointer",
                           display: "flex",
                           justifyContent: "space-between",
                           alignItems: "center",
-                          backgroundColor: isSelected ? "rgba(59,130,246,0.06)" : "rgba(15,23,42,0.6)",
+                          // When selected, use a slightly lighter gray and add
+                          // a yellow accent bar on the left to visually anchor
+                          // the selected lead to the conversation on the right.
+                          backgroundColor: isSelected ? "#1f2937" : "rgba(15,23,42,0.6)",
+                          border: isSelected ? "1px solid rgba(255,255,255,0.03)" : "1px solid #374151",
+                          borderLeft: isSelected ? "4px solid #f59e0b" : undefined,
+                          transition: "background-color 140ms ease, border-left-color 140ms ease",
                         }}
                       >
                         <div>
-                          <strong>{lead.name || "Unnamed lead"}</strong>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            {lead.has_unread_messages ? (
+                              <span
+                                aria-hidden
+                                title="Unread messages"
+                                style={{
+                                  width: '8px',
+                                  height: '8px',
+                                  borderRadius: '999px',
+                                  backgroundColor: '#ef4444', // red unread dot
+                                  display: 'inline-block',
+                                }}
+                              />
+                            ) : null}
+
+                            <strong>{lead.name || "Unnamed lead"}</strong>
+                          </div>
+
                           <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>{lead.phone}</div>
                           {lead.email && <div style={{ fontSize: "0.8rem", opacity: 0.8 }}>{lead.email}</div>}
                         </div>
@@ -1173,22 +1386,22 @@ export default function Home() {
               )}
             </div>
           </div>
+          )}
 
           {/* RIGHT COLUMN – Conversation */}
           
-            <aside
-              className="h-full flex flex-col"
-              style={{
-                flex: 1.2,
-                borderRadius: "1rem",
-               border: "1px solid #1f2937",
-               padding: "1rem 1.5rem 1.5rem", // less top padding
-               display: "flex",
-               flexDirection: "column",
-               height: '100%',
-               minHeight: 0, // allow inner flex children to shrink/scroll
-             }}
-            >
+              {!(isMobile && !isDetailViewOpen) && (
+              <aside
+                  className={`h-full ${isDetailViewOpen ? 'flex w-full flex-col' : 'hidden md:flex md:flex-col'}`}
+                  style={{
+                    flex: 1.2,
+                    borderRadius: "1rem",
+                   border: "1px solid #1f2937",
+                   padding: "1rem 1.5rem 1.5rem", // less top padding
+                   height: '100%',
+                   minHeight: 0, // allow inner flex children to shrink/scroll
+                 }}
+                >
             {/* Conversation header: automation toggle + jump/auto-scroll controls */}
             <div
               style={{
@@ -1203,6 +1416,25 @@ export default function Home() {
             >
               {/* spacer: the automation status is shown as a pill at top-right */}
               <div style={{ minWidth: '8px' }} />
+
+                {/* Mobile back button: shown only on small screens when in detail view */}
+                {isDetailViewOpen && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLead(null)}
+                    className="md:hidden"
+                    style={{
+                      marginRight: '0.5rem',
+                      padding: '0.25rem 0.45rem',
+                      borderRadius: '0.5rem',
+                      border: '1px solid #374151',
+                      background: 'transparent',
+                      color: '#cbd5e1'
+                    }}
+                  >
+                    ← Back
+                  </button>
+                )}
 
               <div style={{ display: "inline-flex", gap: "0.5rem", alignItems: "center" }}>
                 {isScrolledUp && (
@@ -1225,61 +1457,112 @@ export default function Home() {
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => setAutoScrollAlways((v) => !v)}
-                  title={autoScrollAlways ? "Auto-scroll: always" : "Auto-scroll: only when near bottom"}
-                  aria-pressed={autoScrollAlways}
-                  aria-label="Toggle auto-scroll behavior"
-                  style={{
-                    fontSize: "0.7rem",
-                    padding: "0.25rem 0.5rem",
-                    borderRadius: "999px",
-                    border: "1px solid #374151",
-                    backgroundColor: autoScrollAlways ? "rgba(16,185,129,0.15)" : "rgba(55,65,81,0.4)",
-                    color: autoScrollAlways ? "#6ee7b7" : "#9ca3af",
-                    cursor: "pointer",
-                  }}
-                >
-                  {autoScrollAlways ? "Auto: Always" : "Auto: Near Bottom"}
-                </button>
+                {/* Auto-scroll toggle: hide on small screens to avoid UI overlap */}
+                {!isMobile && (
+                  <button
+                    type="button"
+                    onClick={() => setAutoScrollAlways((v) => !v)}
+                    title={autoScrollAlways ? "Auto-scroll: always" : "Auto-scroll: only when near bottom"}
+                    aria-pressed={autoScrollAlways}
+                    aria-label="Toggle auto-scroll behavior"
+                    style={{
+                      fontSize: "0.7rem",
+                      padding: "0.25rem 0.5rem",
+                      borderRadius: "999px",
+                      border: "1px solid #374151",
+                      backgroundColor: autoScrollAlways ? "rgba(16,185,129,0.15)" : "rgba(55,65,81,0.4)",
+                      color: autoScrollAlways ? "#6ee7b7" : "#9ca3af",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {autoScrollAlways ? "Auto: Always" : "Auto: Near Bottom"}
+                  </button>
+                )}
               </div>
             </div>
 
+            {/* Mobile-only compact header: visible when detail view is open */}
+            {isDetailViewOpen && (
+              <div className="ls-mobile-header md:hidden">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLead(null)}
+                    style={{ padding: '0.25rem', borderRadius: '0.45rem', border: '1px solid #374151', background: 'transparent', color: '#cbd5e1' }}
+                  >
+                    ←
+                  </button>
+                  <div style={{ fontWeight: 600 }}>{selectedLead?.name || 'Conversation'}</div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{selectedLead?.phone}</div>
+                  <button
+                    type="button"
+                    onClick={handleToggleAutomation}
+                    disabled={!selectedLead}
+                    title={selectedLead ? (automationPaused ? 'Activate automation' : 'Pause automation') : 'Select a lead to change automation'}
+                    aria-pressed={automationPaused}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '0.25rem 0.5rem',
+                      borderRadius: '999px',
+                      fontSize: '0.75rem',
+                      backgroundColor: automationPaused ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
+                      color: automationPaused ? '#fecaca' : '#6ee7b7',
+                      border: '1px solid rgba(71,85,105,0.18)',
+                      backdropFilter: 'blur(4px)',
+                      cursor: selectedLead ? 'pointer' : 'default'
+                    }}
+                  >
+                    {automationPaused ? '⏸' : '🟢'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div
-          style={{
-            position: 'relative',
-            flex: 1,
-            minHeight: 0,
-            borderRadius: "0.75rem",
-            border: "1px solid #444",
-            padding: "0.75rem 1rem",
-            paddingBottom: "4.25rem", // leave room for the reply input
-            overflowY: "auto",
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.5rem",
-          }}
-          ref={messagesEndRef}
-        >
-          {/* automation status pill (top-right of conversation) */}
-          <div style={{ position: 'absolute', right: '0.85rem', top: '0.6rem', zIndex: 5 }}>
-            <span
+              className="ls-conversation-container"
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '0.25rem 0.6rem',
-                borderRadius: '999px',
-                fontSize: '0.75rem',
-                backgroundColor: automationPaused ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
-                color: automationPaused ? '#fecaca' : '#6ee7b7',
-                border: '1px solid rgba(71,85,105,0.18)',
-                backdropFilter: 'blur(4px)'
+                position: 'relative',
+                flex: 1,
+                minHeight: 0,
+                borderRadius: "0.75rem",
+                border: "1px solid #444",
+                padding: "0.75rem 1rem",
+                paddingBottom: "4.25rem", // leave room for the reply input
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.5rem",
               }}
+              ref={messagesEndRef}
             >
-              {automationPaused ? '⏸ Automation Paused' : '🟢 Automation Active'}
-            </span>
-          </div>
+          {/* automation status pill (top-right of conversation) */}
+            <div style={{ position: 'absolute', right: '0.85rem', top: '0.6rem', zIndex: 5 }}>
+              <button
+                type="button"
+                onClick={handleToggleAutomation}
+                disabled={!selectedLead}
+                title={selectedLead ? (automationPaused ? 'Activate automation' : 'Pause automation') : 'Select a lead to change automation'}
+                aria-pressed={automationPaused}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '0.25rem 0.6rem',
+                  borderRadius: '999px',
+                  fontSize: '0.75rem',
+                  backgroundColor: automationPaused ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
+                  color: automationPaused ? '#fecaca' : '#6ee7b7',
+                  border: '1px solid rgba(71,85,105,0.18)',
+                  backdropFilter: 'blur(4px)',
+                  cursor: selectedLead ? 'pointer' : 'default'
+                }}
+              >
+                {automationPaused ? '⏸ Automation Paused' : '🟢 Automation Active'}
+              </button>
+            </div>
   {conversation.length === 0 ? (
     // EMPTY: timeline + “now you are here” + chips
     <div
@@ -1569,14 +1852,22 @@ export default function Home() {
             </div>
 
             <div
+              className="ls-message-bubble"
               style={{
-                display: "inline-block",
-                padding: "0.35rem 0.6rem",
-                borderRadius: "0.5rem",
-                backgroundColor: isInbound ? "#111827" : "#1f2937",
-                border: "1px solid #374151",
-                fontSize: "0.85rem",
-                }}
+                display: 'inline-block',
+                padding: '0.5rem 0.75rem',
+                borderRadius: '0.75rem',
+                maxWidth: '72%',
+                backgroundColor: isInbound ? '#1f2937' : '#2563eb', // lead: gray-800, agent: blue-600
+                color: '#fff',
+                fontSize: '0.9rem',
+                lineHeight: 1.25,
+                // push outbound (agent) messages to the right and inbound to the left
+                marginLeft: isInbound ? undefined : 'auto',
+                marginRight: isInbound ? 'auto' : undefined,
+                boxShadow: isInbound ? 'none' : '0 6px 18px rgba(37,99,235,0.12)',
+                border: '1px solid rgba(255,255,255,0.03)'
+              }}
             >
               {msg.body}
             </div>
@@ -1589,7 +1880,7 @@ export default function Home() {
             {/* --- END conversation block --- */}
 
             {/* Reply form */}
-            <div style={{ flexShrink: 0 }}>
+            <div className="ls-reply-form" style={{ flexShrink: 0 }}>
               <form
                 onSubmit={handleSendReply}
                 style={{
@@ -1641,6 +1932,38 @@ export default function Home() {
                 </button>
               </form>
 
+              {/* Live preview of variable interpolation to build trust */}
+              {replyText.trim() ? (
+                (() => {
+                  const preview = generatePreview(replyText);
+                  const unresolved = (preview.match(/\{\w+\}/g) || []).map((s) => s);
+                  return (
+                    <div style={{ marginTop: "0.5rem" }}>
+                      <div
+                        style={{
+                          padding: "0.5rem 0.75rem",
+                          borderRadius: "0.5rem",
+                          background: "rgba(255,255,255,0.02)",
+                          border: "1px solid #2b3440",
+                          color: "#e5e7eb",
+                          fontSize: "0.9rem",
+                          lineHeight: 1.3,
+                        }}
+                      >
+                        <strong style={{ color: '#9ca3af', marginRight: 6 }}>Preview:</strong>
+                        <span>{preview}</span>
+                      </div>
+
+                      {unresolved.length > 0 && (
+                        <div style={{ marginTop: "0.35rem", color: "#fb7185", fontSize: "0.78rem" }}>
+                          Unresolved variables: {unresolved.join(", ")} — they will remain as-is in the sent message.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+              ) : null}
+
               <p
                 style={{
                   fontSize: "0.8rem",
@@ -1655,7 +1978,7 @@ export default function Home() {
             </div>
 
             {/* Test SMS button removed */}
-          </aside>
+          </aside>)}
         </div>
         {/* Add Lead modal */}
         {addModalOpen && (
@@ -1777,6 +2100,59 @@ export default function Home() {
           </div>
         )}
 
+        {/* Pause automation confirmation modal */}
+        {showPauseConfirm && selectedLead && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 300,
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              style={{
+                width: "min(560px, 96%)",
+                backgroundColor: "#071023",
+                padding: "1rem",
+                borderRadius: "0.75rem",
+                border: "1px solid #374151",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.6)",
+              }}
+            >
+              <h3 style={{ margin: 0, marginBottom: "0.5rem" }}>Pause Automation</h3>
+
+              <p style={{ color: "#cbd5e1" }}>
+                Are you sure you want to pause automated nurture messages for <strong>{selectedLead.name || 'this lead'}</strong>?
+                Pausing will prevent scheduled nurture messages from being sent to this lead until automation is re-activated.
+              </p>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.75rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowPauseConfirm(false)}
+                  style={{ padding: '0.45rem 0.75rem', borderRadius: '0.5rem', border: '1px solid #374151', backgroundColor: 'transparent', color: '#9ca3af', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void performToggleAutomation(true)}
+                  style={{ padding: '0.45rem 0.9rem', borderRadius: '0.5rem', border: '1px solid #374151', backgroundColor: 'rgba(239,68,68,0.9)', color: '#fff', cursor: 'pointer' }}
+                >
+                  Pause Automation
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Responsive layout rules */}
         <style jsx>{`
           .ls-main-layout {
@@ -1787,6 +2163,122 @@ export default function Home() {
             .ls-main-layout {
               flex-direction: column;
 }
+          }
+
+          .ls-activity-badge {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            background: #fb7185; /* red */
+            display: inline-block;
+            box-shadow: 0 0 0 0 rgba(251,113,133,0.7);
+            animation: ls-pulse 1.8s infinite ease-out;
+            flex-shrink: 0;
+          }
+
+          @keyframes ls-pulse {
+            0% {
+              box-shadow: 0 0 0 0 rgba(251,113,133,0.7);
+            }
+            70% {
+              box-shadow: 0 0 0 10px rgba(251,113,133,0);
+            }
+            100% {
+              box-shadow: 0 0 0 0 rgba(251,113,133,0);
+            }
+          }
+
+          /* Mobile-specific adjustments */
+          @media (max-width: 900px) {
+            .ls-conversation-container {
+              padding-top: 0.75rem; /* default top padding */
+              /* extra room for fixed reply bar + safe-area on phones */
+              padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
+            }
+
+            /* When detail view is open, make room for the compact mobile header */
+            .detail-open .ls-conversation-container {
+              padding-top: calc(0.75rem + 48px);
+            }
+
+            .ls-message-bubble {
+              max-width: 92% !important;
+              word-break: break-word;
+            }
+
+            .ls-mobile-header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 0.75rem;
+              padding: 0.5rem 0;
+              border-bottom: 1px solid rgba(255,255,255,0.03);
+              background: linear-gradient(180deg, rgba(7,16,35,0.98), rgba(7,16,35,0.95));
+              position: sticky;
+              top: 0;
+              z-index: 40;
+            }
+
+            /* Make the reply form fixed at bottom on small screens for easy access */
+            /* Only fix the reply bar wrapper when the detail view is open on mobile */
+            .detail-open .ls-reply-form {
+              position: fixed;
+              left: 0;
+              right: 0;
+              bottom: calc(0px + env(safe-area-inset-bottom));
+              padding: 12px;
+              background: linear-gradient(180deg, rgba(2,6,23,0.98), rgba(2,6,23,0.96));
+              z-index: 300;
+              display: block;
+            }
+
+            /* When detail is open on mobile, give the conversation area more vertical space */
+            .detail-open .ls-conversation-container {
+              height: calc(100vh - 196px);
+              max-height: calc(100vh - 196px);
+            }
+
+            .detail-open .ls-reply-form form {
+              width: min(980px, calc(100% - 24px));
+              margin: 0 auto;
+              display: flex;
+              gap: 0.5rem;
+              align-items: center;
+            }
+
+            /* When detail is NOT open, keep the reply form static/relative so it doesn't float over the master list */
+            :not(.detail-open) .ls-reply-form {
+              position: relative;
+              padding: 0;
+              background: transparent;
+            }
+
+            .ls-reply-form form input[type="text"] {
+              font-size: 1rem;
+              padding: 0.65rem 0.85rem;
+              border-radius: 999px;
+            }
+
+            .ls-reply-form form button[type="submit"] {
+              padding: 0.6rem 0.95rem;
+            }
+
+            /* Slightly reduce left column visual density on mobile */
+            .ls-main-layout > div:first-child {
+              padding-bottom: 6rem;
+            }
+
+            /* Make sure message list can scroll under the fixed input without being clipped */
+            .ls-conversation-container {
+              -webkit-overflow-scrolling: touch;
+            }
+
+            /* On mobile, limit the lead list to show ~4 items and make it scrollable */
+            .ls-lead-list {
+              max-height: 360px; /* approx 4 items */
+              overflow-y: auto;
+              -webkit-overflow-scrolling: touch;
+            }
           }
         `}</style>
       </main>
