@@ -1432,18 +1432,18 @@ export default function Home() {
           </div>
 
             {/* RIGHT COLUMN – Conversation */}
-            {(!isMobile || selectedLead) && (
-              <aside
-                className="h-full flex w-full flex-col"
-                style={{
-                  flex: 1.2,
-                  borderRadius: "1rem",
-                  border: "1px solid #1f2937",
-                  padding: "1rem 1.5rem 1.5rem", // less top padding
-                  height: "100%",
-                  minHeight: 0, // allow inner flex children to shrink/scroll
-                }}
-              >
+            {rightTab === 'conversation' && (
+            <aside
+              className="h-full flex w-full flex-col md:order-2 order-1"
+              style={{
+                flex: 1.2,
+                borderRadius: "1rem",
+                border: "1px solid #1f2937",
+                padding: "1rem 1.5rem 1.5rem", // less top padding
+                height: "100%",
+                minHeight: 0, // allow inner flex children to shrink/scroll
+              }}
+            >
             <div
               className="ls-conversation-container"
               style={{
