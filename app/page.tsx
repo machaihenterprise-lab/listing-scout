@@ -1063,7 +1063,7 @@ export default function Home() {
             </div>
         </div>
 
-        {/* Main layout: on mobile, conversation first then lead/add-lead below; side-by-side on md+ */}
+        {/* Main layout: on mobile, show either list/add-lead OR conversation; side-by-side on md+ */}
         <div
           className={`ls-main-layout h-screen flex flex-col md:flex-row ${isDetailViewOpen ? 'detail-open' : ''}`}
           style={{
@@ -1149,9 +1149,10 @@ export default function Home() {
               </div>
             </div>
           )}
-          {/* LEFT COLUMN: Search + Filters + Lead list (mobile: rendered after conversation) */}
+          {/* LEFT COLUMN: Search + Filters + Lead list */}
+          {(!isMobile || !selectedLead) && (
           <div
-            className="h-full flex flex-col md:order-1 order-2"
+            className="h-full flex flex-col"
             style={{
               flex: 1,
               gap: "1rem",
@@ -1305,8 +1306,8 @@ export default function Home() {
                 </ul>
               )}
             </section>
-
-            {/* Quick Add controls + Add Lead button (modal) */}
+          </div>
+          )}
             <div
               style={{
                 display: "flex",
@@ -1320,11 +1321,12 @@ export default function Home() {
               <div
                 style={{
                   display: "flex",
-                  gap: "0.5rem",
+                  gap: "0.4rem",
                   justifyContent: "center",
                   flexWrap: "wrap",
                 }}
               >
+                {/* Compact Quick Add toggle (collapsed by default, esp. on mobile) */}
                 <button
                   type="button"
                   onClick={() => {
@@ -1332,17 +1334,19 @@ export default function Home() {
                     setQuickAddOpen((v) => !v);
                   }}
                   style={{
-                    padding: "0.45rem 0.85rem",
-                    borderRadius: "0.6rem",
+                    padding: isMobile ? "0.3rem 0.6rem" : "0.4rem 0.8rem",
+                    borderRadius: "999px",
                     border: "1px solid #374151",
-                    backgroundColor: quickAddOpen ? "rgba(55,65,81,0.6)" : "transparent",
+                    backgroundColor: quickAddOpen ? "rgba(55,65,81,0.7)" : "transparent",
                     color: "#f9fafb",
                     cursor: "pointer",
+                    fontSize: isMobile ? "0.8rem" : "0.9rem",
                   }}
                 >
                   {quickAddOpen ? "Close Quick Add" : "Quick Add"}
                 </button>
 
+                {/* Primary Add Lead modal button (preferred on mobile) */}
                 <button
                   type="button"
                   onClick={() => {
@@ -1350,12 +1354,13 @@ export default function Home() {
                     setAddModalOpen(true);
                   }}
                   style={{
-                    padding: "0.45rem 0.85rem",
-                    borderRadius: "0.6rem",
+                    padding: isMobile ? "0.3rem 0.7rem" : "0.45rem 0.85rem",
+                    borderRadius: "999px",
                     border: "1px solid #374151",
                     backgroundColor: "rgba(37,99,235,0.9)",
                     color: "#fff",
                     cursor: "pointer",
+                    fontSize: isMobile ? "0.8rem" : "0.9rem",
                   }}
                 >
                   + Add Lead
@@ -1380,12 +1385,13 @@ export default function Home() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     style={{
-                      padding: "0.35rem 0.55rem",
+                      padding: "0.3rem 0.5rem",
                       borderRadius: "0.5rem",
                       border: "1px solid #374151",
                       backgroundColor: "rgba(15,23,42,0.9)",
                       color: "#f9fafb",
-                      width: isMobile ? "48%" : "40%",
+                      width: isMobile ? "46%" : "40%",
+                      fontSize: "0.85rem",
                     }}
                   />
 
@@ -1395,12 +1401,13 @@ export default function Home() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     style={{
-                      padding: "0.35rem 0.55rem",
+                      padding: "0.3rem 0.5rem",
                       borderRadius: "0.5rem",
                       border: "1px solid #374151",
                       backgroundColor: "rgba(15,23,42,0.9)",
                       color: "#f9fafb",
-                      width: isMobile ? "40%" : "35%",
+                      width: isMobile ? "38%" : "35%",
+                      fontSize: "0.85rem",
                     }}
                   />
 
@@ -1408,13 +1415,13 @@ export default function Home() {
                     type="submit"
                     disabled={loading}
                     style={{
-                      padding: "0.35rem 0.65rem",
+                      padding: "0.32rem 0.6rem",
                       borderRadius: "0.5rem",
                       border: "1px solid #374151",
                       backgroundColor: loading ? "rgba(55,65,81,0.6)" : "rgba(37,99,235,0.9)",
                       color: "#fff",
                       cursor: loading ? "default" : "pointer",
-                      fontSize: "0.85rem",
+                      fontSize: "0.8rem",
                     }}
                   >
                     {loading ? "Adding..." : "Add"}
@@ -1424,9 +1431,10 @@ export default function Home() {
             </div>
           </div>
 
-              {/* RIGHT COLUMN – Conversation (mobile: shown first) */}
+            {/* RIGHT COLUMN – Conversation */}
+            {(!isMobile || selectedLead) && (
               <aside
-                className="h-full flex w-full flex-col md:order-2 order-1"
+                className="h-full flex w-full flex-col"
                   style={{
                     flex: 1.2,
                     borderRadius: "1rem",
@@ -1891,6 +1899,7 @@ export default function Home() {
 
             {/* Test SMS button removed */}
           </aside>
+          )}
         </div>
         {/* Add Lead modal */}
         {addModalOpen && (
@@ -2102,17 +2111,6 @@ export default function Home() {
 
           /* Mobile-specific adjustments */
           @media (max-width: 900px) {
-            .ls-conversation-container {
-              padding-top: 0.75rem; /* default top padding */
-              /* extra room for fixed reply bar + safe-area on phones */
-              padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
-            }
-
-            /* When detail view is open, make room for the compact mobile header */
-            .detail-open .ls-conversation-container {
-              padding-top: calc(0.75rem + 48px);
-            }
-
             .ls-message-bubble {
               max-width: 92% !important;
               word-break: break-word;
@@ -2126,7 +2124,8 @@ export default function Home() {
           }
         `}</style>
       </main>
-    </>            
+    </>
   );
 }
+
 
