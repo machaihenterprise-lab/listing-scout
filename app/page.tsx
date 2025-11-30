@@ -1149,14 +1149,13 @@ export default function Home() {
               </div>
             </div>
           )}
-          {/* LEFT COLUMN: Search + Filters + Lead list */}
-          {(!isMobile || !selectedLead) && (
+          {/* LEFT COLUMN: Search + Filters + Lead list (mobile: rendered after conversation) */}
           <div
-            className="h-full flex flex-col"
+            className="h-full flex flex-col md:order-1 order-2"
             style={{
               flex: 1,
               gap: "1rem",
-              height: '100%'
+              height: "100%",
             }}
           >
             {/* Search + Tabs */}
@@ -1307,7 +1306,6 @@ export default function Home() {
               )}
             </section>
           </div>
-          )}
             <div
               style={{
                 display: "flex",
@@ -1431,19 +1429,19 @@ export default function Home() {
             </div>
           </div>
 
-            {/* RIGHT COLUMN – Conversation */}
-            {rightTab === 'conversation' && (
-            <aside
-              className="h-full flex w-full flex-col md:order-2 order-1"
-              style={{
-                flex: 1.2,
-                borderRadius: "1rem",
-                border: "1px solid #1f2937",
-                padding: "1rem 1.5rem 1.5rem", // less top padding
-                height: "100%",
-                minHeight: 0, // allow inner flex children to shrink/scroll
-              }}
-            >
+            {/* RIGHT COLUMN – Conversation (mobile: shown first) */}
+            {rightTab === "conversation" && (
+              <aside
+                className="h-full flex w-full flex-col md:order-2 order-1"
+                style={{
+                  flex: 1.2,
+                  borderRadius: "1rem",
+                  border: "1px solid #1f2937",
+                  padding: "1rem 1.5rem 1.5rem", // less top padding
+                  height: "100%",
+                  minHeight: 0, // allow inner flex children to shrink/scroll
+                }}
+              >
             <div
               className="ls-conversation-container"
               style={{
