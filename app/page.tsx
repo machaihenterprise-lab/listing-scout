@@ -181,8 +181,7 @@ export default function Home() {
   const [replyText, setReplyText] = useState("");
   const [sendingReply, setSendingReply] = useState(false);
 
-  // Twilio test
-  // Twilio test (removed UI) - no local state needed
+  // SMS provider tests removed — using Telnyx for inbound/outbound
 
   // Pause automation toggle
   const [automationPaused, setAutomationPaused] = useState(false);

@@ -7,7 +7,7 @@
 ### Tech Stack
 - **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS, TypeScript
 - **Backend**: Next.js API Routes, Supabase (PostgreSQL + managed functions)
-- **SMS Providers**: Telnyx (primary inbound), Twilio (outbound/nurture), webhook integration
+- **SMS Providers**: Telnyx (inbound + outbound/nurture), webhook integration
 - **Real-time UI**: 5-second polling for message updates, local echo for immediate feedback
 
 ---
@@ -23,7 +23,7 @@
    - Updates `last_contacted_at` on reply
    - **Key pattern**: Returns 200 even for unknown numbers; logs them without lead association
 
-2. **Twilio** (via `supabase/functions/run-nurture-cycle/`)
+2. **Telnyx (nurture)** (via `supabase/functions/run-nurture-cycle/`)
    - Sends auto-triggered nurture SMS in DAY_1, DAY_2, DAY_3, DAY_5, DAY_7 stages
    - Uses Deno runtime in Supabase Functions
    - Service role client (full permissions) to update lead state post-send
@@ -41,7 +41,7 @@ Lead Created (manual) → status: NURTURE, nurture_stage: DAY_1
                       ↓
           run-nurture-cycle (scheduled job)
                       ↓
-       DAY_1 SMS sent via Twilio → last_nurture_sent_at updated
+      DAY_1 SMS sent via Telnyx → last_nurture_sent_at updated
                       ↓
        computeNextNurture() → next_nurture_at = NOW + 24h + jitter
                       ↓
@@ -106,7 +106,7 @@ Lead Created (manual) → status: NURTURE, nurture_stage: DAY_1
 
 ### 4. **Environment Variable Separation**
    - **Telnyx** (manual replies, inbound): `TELNYX_API_KEY`, `TELNYX_MESSAGING_PROFILE_ID`, `TELNYX_US_NUMBER`
-   - **Twilio** (auto nurture): `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`
+   - **Telnyx** (auto nurture): `TELNYX_API_KEY`, `TELNYX_MESSAGING_PROFILE_ID`, `TELNYX_US_NUMBER`
    - Supabase: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (anon key used; RLS disabled)
    - **Current RLS Status**: All tables world-readable; consider enabling for production
 
@@ -134,9 +134,8 @@ npm run lint    # ESLint check
 - Use Telnyx sandbox or webhook replay feature to test locally (requires ngrok or similar)
 
 ### SMS Provider Quirks
-- **Telnyx**: Manual/inbound; returns `data.id` on success; validates `messaging_profile_id`
-- **Twilio**: Nurture/auto; uses Basic Auth (Base64 `accountSid:authToken`)
-- Both have rate limits; Twilio especially strict on throughput
+- **Telnyx**: Manual/inbound/nurture; returns `data.id` on success; validates `messaging_profile_id`
+- Both have rate limits; watch throughput and retries
 
 ---
 

@@ -36,7 +36,14 @@ serve(async (req) => {
     // Optional query parameter `apply=true` will update matched rows' `next_nurture_at`
     // to now, so they can be picked up by the nurture cycle if desired.
     const url = new URL(req.url);
-    const apply = url.searchParams.get("apply") === "true";
+    // apply=true will update matched rows; dry_run or dry_run=true are aliases
+    // for running a dry listing without mutating data.
+    let apply = url.searchParams.get("apply") === "true";
+    const dryRun = url.searchParams.get("dry_run") === "true" || url.searchParams.get("dry") === "true";
+    if (dryRun) apply = false;
+
+    let applied = false;
+    let updatedIds: string[] = [];
 
     if (apply && results.length > 0) {
       const nowIso = new Date().toISOString();
@@ -50,12 +57,18 @@ serve(async (req) => {
         console.error("Error updating expired snoozes:", updateErr);
         return new Response(JSON.stringify({ ok: false, error: updateErr.message }), { status: 500 });
       }
+
+      applied = true;
+      updatedIds = ids;
     }
 
-    return new Response(JSON.stringify({ ok: true, count: results.length, leads: results }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ ok: true, server_now: now, applied, count: results.length, updated_ids: updatedIds, leads: results }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   } catch (err) {
     console.error("expire-snoozes failed:", err);
     return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500 });
