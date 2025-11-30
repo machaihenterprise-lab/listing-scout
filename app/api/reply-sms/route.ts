@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+// Defer creating the Supabase service client until request time so
+// the module can be evaluated during build even if env vars are not set.
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Use service role key for server-side inserts (stronger guarantees)
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return null;
+  }
+
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
 
 export async function POST(req: Request) {
   try {
@@ -50,15 +57,20 @@ export async function POST(req: Request) {
       console.error("Telnyx error:", telnyxRes.status, telnyxJson);
       // Attempt to persist the delivery error for later inspection/metrics
       try {
-        await supabase.from("delivery_errors").insert({
-          lead_id: leadId,
-          to_phone: to,
-          provider: "telnyx",
-          status_code: telnyxRes.status,
-          error_text:
-            telnyxJson?.errors?.[0]?.detail || JSON.stringify(telnyxJson),
-          payload: telnyxJson ?? {},
-        });
+          const supabase = getSupabaseClient();
+          if (supabase) {
+            await supabase.from("delivery_errors").insert({
+              lead_id: leadId,
+              to_phone: to,
+              provider: "telnyx",
+              status_code: telnyxRes.status,
+              error_text:
+                telnyxJson?.errors?.[0]?.detail || JSON.stringify(telnyxJson),
+              payload: telnyxJson ?? {},
+            });
+          } else {
+            console.warn("Supabase client not configured; skipping delivery error persist");
+          }
       } catch (dbErr) {
         console.error("Failed to log delivery error to Supabase:", dbErr);
       }
@@ -75,6 +87,12 @@ export async function POST(req: Request) {
 
     // 2) Log outbound message in Supabase (service role)
     try {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        console.error("Supabase service role key is not configured");
+        return NextResponse.json({ error: "Supabase service key is required" }, { status: 500 });
+      }
+
       const { error: insertError } = await supabase.from("messages").insert({
         lead_id: leadId,
         direction: "OUTBOUND",
