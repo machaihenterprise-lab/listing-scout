@@ -1307,8 +1307,24 @@ export default function Home() {
             </section>
 
             {/* Quick Add controls + Add Lead button (modal) */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center" }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.5rem",
+                paddingBottom: isMobile ? "0.75rem" : "1.25rem",
+                borderTop: isMobile ? "1px solid rgba(148,163,184,0.12)" : undefined,
+                marginTop: isMobile ? "0.75rem" : "1rem",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  gap: "0.5rem",
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => {
@@ -1363,7 +1379,14 @@ export default function Home() {
                     placeholder="Name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    style={{ padding: "0.45rem 0.6rem", borderRadius: "0.5rem", border: "1px solid #374151", backgroundColor: "rgba(15,23,42,0.9)", color: "#f9fafb", width: "40%" }}
+                    style={{
+                      padding: "0.35rem 0.55rem",
+                      borderRadius: "0.5rem",
+                      border: "1px solid #374151",
+                      backgroundColor: "rgba(15,23,42,0.9)",
+                      color: "#f9fafb",
+                      width: isMobile ? "48%" : "40%",
+                    }}
                   />
 
                   <input
@@ -1371,13 +1394,28 @@ export default function Home() {
                     placeholder="Phone"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    style={{ padding: "0.45rem 0.6rem", borderRadius: "0.5rem", border: "1px solid #374151", backgroundColor: "rgba(15,23,42,0.9)", color: "#f9fafb", width: "35%" }}
+                    style={{
+                      padding: "0.35rem 0.55rem",
+                      borderRadius: "0.5rem",
+                      border: "1px solid #374151",
+                      backgroundColor: "rgba(15,23,42,0.9)",
+                      color: "#f9fafb",
+                      width: isMobile ? "40%" : "35%",
+                    }}
                   />
 
                   <button
                     type="submit"
                     disabled={loading}
-                    style={{ padding: "0.45rem 0.75rem", borderRadius: "0.5rem", border: "1px solid #374151", backgroundColor: loading ? "rgba(55,65,81,0.6)" : "rgba(37,99,235,0.9)", color: "#fff", cursor: loading ? "default" : "pointer" }}
+                    style={{
+                      padding: "0.35rem 0.65rem",
+                      borderRadius: "0.5rem",
+                      border: "1px solid #374151",
+                      backgroundColor: loading ? "rgba(55,65,81,0.6)" : "rgba(37,99,235,0.9)",
+                      color: "#fff",
+                      cursor: loading ? "default" : "pointer",
+                      fontSize: "0.85rem",
+                    }}
                   >
                     {loading ? "Adding..." : "Add"}
                   </button>
