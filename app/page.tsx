@@ -1527,11 +1527,11 @@ export default function Home() {
                 borderRadius: "0.75rem",
                 border: "1px solid #444",
                 padding: "0.75rem 1rem",
-                paddingBottom: "4.25rem", // leave room for the reply input
+                paddingBottom: "3.25rem", // slightly more room for content vs input
                 overflowY: "auto",
                 display: "flex",
                 flexDirection: "column",
-                gap: "0.5rem",
+                gap: "0.75rem",
               }}
               ref={messagesEndRef}
             >
