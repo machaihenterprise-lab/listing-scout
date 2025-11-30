@@ -6,7 +6,7 @@
 
 ### Tech Stack
 - **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS, TypeScript
-- **Backend**: Next.js API Routes, Supabase (PostgreSQL + managed functions)
+- **Backend**: Next.js API Routes, Supabase (PostgreSQL + Edge Functions)
 - **SMS Providers**: Telnyx (inbound + outbound/nurture), webhook integration
 - **Real-time UI**: 5-second polling for message updates, local echo for immediate feedback
 
@@ -82,7 +82,7 @@ Lead Created (manual) → status: NURTURE, nurture_stage: DAY_1
      2. **Immediately** add message to conversation state with temp ID (`local-${timestamp}`)
      3. **Never** call `fetchMessages` right after — 5s polling will pick it up from DB
    - If you poll immediately, you risk overwriting the local message before DB sync
-   - See: `app/page.tsx` lines ~280-300
+   - See: `app/page.tsx` (reply composer + message list state)
 
 ### 2. **Intent Classification System** (`lib/analyzeIntent.ts`)
    - **STOP keywords** (compliance): "stop", "unsubscribe", "do not text"
@@ -105,10 +105,11 @@ Lead Created (manual) → status: NURTURE, nurture_stage: DAY_1
    - **Calculation**: `computeNextNurture(currentStage, previousSentAtISO)` → `{nextStage, nextNurtureAt}`
 
 ### 4. **Environment Variable Separation**
-   - **Telnyx** (manual replies, inbound): `TELNYX_API_KEY`, `TELNYX_MESSAGING_PROFILE_ID`, `TELNYX_US_NUMBER`
-   - **Telnyx** (auto nurture): `TELNYX_API_KEY`, `TELNYX_MESSAGING_PROFILE_ID`, `TELNYX_US_NUMBER`
-   - Supabase: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (anon key used; RLS disabled)
-   - **Current RLS Status**: All tables world-readable; consider enabling for production
+   - **Telnyx (manual/inbound)**: `TELNYX_API_KEY`, `TELNYX_MESSAGING_PROFILE_ID`, `TELNYX_US_NUMBER`
+   - **Telnyx (auto nurture)**: same Telnyx envs, used from Supabase Edge Function
+   - **Supabase (frontend/API)**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - **Supabase (service role / cron)**: `SUPABASE_SERVICE_ROLE_KEY` (see `app/api/activity-summary` and `.github/workflows/*`)
+   - **Current RLS Status**: Tables are world-readable in dev; lock down for production
 
 ---
 
