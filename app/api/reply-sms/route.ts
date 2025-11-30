@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// Using anon key for now (RLS disabled on your tables)
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Use service role key for server-side inserts (stronger guarantees)
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function POST(req: Request) {
   try {
@@ -48,6 +48,21 @@ export async function POST(req: Request) {
 
     if (!telnyxRes.ok) {
       console.error("Telnyx error:", telnyxRes.status, telnyxJson);
+      // Attempt to persist the delivery error for later inspection/metrics
+      try {
+        await supabase.from("delivery_errors").insert({
+          lead_id: leadId,
+          to_phone: to,
+          provider: "telnyx",
+          status_code: telnyxRes.status,
+          error_text:
+            telnyxJson?.errors?.[0]?.detail || JSON.stringify(telnyxJson),
+          payload: telnyxJson ?? {},
+        });
+      } catch (dbErr) {
+        console.error("Failed to log delivery error to Supabase:", dbErr);
+      }
+
       return NextResponse.json(
         {
           error:
@@ -58,26 +73,28 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2) Log outbound message in Supabase
-    const { error: insertError } = await supabase.from("messages").insert({
-      lead_id: leadId,
-      direction: "OUTBOUND",
-      channel: "SMS",
-      body,
-      is_auto: false,
-    });
+    // 2) Log outbound message in Supabase (service role)
+    try {
+      const { error: insertError } = await supabase.from("messages").insert({
+        lead_id: leadId,
+        direction: "OUTBOUND",
+        channel: "SMS",
+        body,
+        is_auto: false,
+      });
 
-    if (insertError) {
-      console.error("Supabase insert error:", insertError);
-      // We still return success to client since SMS was sent,
-      // but we tell you logging failed.
-      return NextResponse.json(
-        {
-          warning: "SMS sent but logging to Supabase failed",
-          supabaseError: insertError.message,
-        },
-        { status: 200 }
-      );
+      if (insertError) {
+        console.error("Supabase insert error:", insertError);
+        return NextResponse.json(
+          {
+            warning: "SMS sent but logging to Supabase failed",
+            supabaseError: insertError.message,
+          },
+          { status: 200 }
+        );
+      }
+    } catch (dbErr) {
+      console.error("Unexpected DB error logging message:", dbErr);
     }
 
     return NextResponse.json(

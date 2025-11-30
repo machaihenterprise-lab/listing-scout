@@ -188,7 +188,7 @@ export default function Home() {
 
   // Left column UI: search, filter, modal
   const [searchTerm, setSearchTerm] = useState("");
-  const [leadFilter, setLeadFilter] = useState<"HOT" | "NURTURE" | "ALL">("HOT");
+  const [leadFilter, setLeadFilter] = useState<"HOT" | "NURTURE" | "ALL">("NURTURE");
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const quickAddNameRef = useRef<HTMLInputElement | null>(null);
@@ -209,6 +209,9 @@ export default function Home() {
 
   // Header height provided by `Header` via `onHeightChange`
   const [headerHeight, setHeaderHeight] = useState<number>(0);
+
+  // Right column tab state (conversation vs notes)
+  const [rightTab, setRightTab] = useState<'conversation' | 'notes'>('conversation');
 
   // Scroll behavior controls
   const SCROLL_THRESHOLD_PX = 150; // distance from bottom to consider "near bottom"
@@ -300,11 +303,12 @@ export default function Home() {
 
       setLeads(mappedLeads);
 
-      // Auto-select a lead if none selected yet
+      // Auto-select a lead if none selected yet. Prefer a lead matching the
+      // current `leadFilter` so newly-created leads are immediately visible.
       if (!selectedLead && mappedLeads.length > 0) {
-        const firstHot =
-          mappedLeads.find((l) => l.status === "HOT") || mappedLeads[0];
-        setSelectedLead(firstHot);
+        const preferred =
+          mappedLeads.find((l) => (leadFilter === 'ALL' ? true : l.status === leadFilter)) || mappedLeads[0];
+        setSelectedLead(preferred);
       }
     } catch (err: unknown) {
       console.error("Error loading leads:", err);
@@ -314,7 +318,7 @@ export default function Home() {
     } finally {
       setLoadingLeads(false);
     }
-  }, [selectedLead]);
+  }, [selectedLead, leadFilter]);
 
   const fetchMessages = useCallback(
   async (leadId: string) => {
@@ -523,7 +527,7 @@ export default function Home() {
 
   console.log("[addLead] submitting", { name, phone, email });
 
-  try {
+    try {
     const { data, error } = await supabase
       .from("leads")
       .insert({
@@ -531,6 +535,7 @@ export default function Home() {
         phone,
         email,
         source: "manual",
+        // Default new manual leads to NURTURE so they enter the nurture workflow
         status: "NURTURE",
         nurture_status: "ACTIVE",
         nurture_stage: "DAY_1",
@@ -867,7 +872,7 @@ export default function Home() {
 
         {/* Main layout */}
         <div
-          className="ls-main-layout"
+          className="ls-main-layout h-[85vh]"
           style={{
             display: "flex",
             gap: "1.5rem",
@@ -954,12 +959,13 @@ export default function Home() {
           )}
           {/* LEFT COLUMN: Search + Filters + Lead list */}
           <div
+            className="h-full"
             style={{
               flex: 1,
               display: "flex",
               flexDirection: "column",
               gap: "1rem",
-              minHeight: headerHeight ? `calc(100vh - ${headerHeight}px - 120px)` : "50vh",
+              height: '100%'
             }}
           >
             {/* Search + Tabs */}
@@ -1029,9 +1035,9 @@ export default function Home() {
 
             {/* Lead list (scrollable) */}
             <section
+              className="h-full overflow-y-auto"
               style={{
                 flex: 1,
-                overflowY: "auto",
                 padding: "0.75rem",
                 borderRadius: "1rem",
                 border: "1px solid #1f2937",
@@ -1171,6 +1177,7 @@ export default function Home() {
           {/* RIGHT COLUMN – Conversation */}
           
             <aside
+              className="h-full flex flex-col"
               style={{
                 flex: 1.2,
                 borderRadius: "1rem",
@@ -1178,47 +1185,26 @@ export default function Home() {
                padding: "1rem 1.5rem 1.5rem", // less top padding
                display: "flex",
                flexDirection: "column",
+               height: '100%',
+               minHeight: 0, // allow inner flex children to shrink/scroll
              }}
             >
+            {/* Conversation header: automation toggle + jump/auto-scroll controls */}
+            <div
+              style={{
+                display: rightTab === 'conversation' ? "flex" : "none",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "0.5rem",
+                marginBottom: "0.75rem",
+                padding: "0.25rem 0.25rem",
+                flexWrap: "wrap",
+              }}
+            >
+              {/* spacer: the automation status is shown as a pill at top-right */}
+              <div style={{ minWidth: '8px' }} />
 
-            {/* Lead header */}
-            <p style={{ marginBottom: "0.25rem" }}>
-              <strong>{selectedLead?.name || "No lead selected"}</strong>
-            </p>
-
-            <div style={{ marginBottom: "0.75rem" }}>
-              <span style={{ color: "#aaa", marginRight: "0.5rem" }}>
-                Status:
-              </span>
-              <StatusPill status={selectedLead?.status || null} />
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
-              <button
-                type="button"
-                onClick={() => setAutomationPaused((prev) => !prev)}
-                disabled={!selectedLead}
-                style={{
-                  fontSize: "0.75rem",
-                  padding: "0.35rem 0.75rem",
-                  borderRadius: "999px",
-                  border: "1px solid #374151",
-                  backgroundColor: automationPaused
-                    ? "rgba(239, 68, 68, 0.15)"
-                    : "rgba(16, 185, 129, 0.15)",
-                  color: automationPaused ? "#fecaca" : "#6ee7b7",
-                  cursor: !selectedLead ? "default" : "pointer",
-                  opacity: !selectedLead ? 0.4 : 1,
-                }}
-              >
-                {automationPaused ? "⏸ Automation Paused" : "🟢 Automation Active"}
-              </button>
-
-              
-            </div>
-
-              {/* Jump to latest + auto-scroll mode controls */}
-              <div style={{ display: "inline-flex", gap: "0.5rem", alignItems: "center", marginLeft: "0.5rem" }}>
+              <div style={{ display: "inline-flex", gap: "0.5rem", alignItems: "center" }}>
                 {isScrolledUp && (
                   <button
                     type="button"
@@ -1258,14 +1244,17 @@ export default function Home() {
                   {autoScrollAlways ? "Auto: Always" : "Auto: Near Bottom"}
                 </button>
               </div>
+            </div>
 
             <div
           style={{
+            position: 'relative',
             flex: 1,
+            minHeight: 0,
             borderRadius: "0.75rem",
             border: "1px solid #444",
             padding: "0.75rem 1rem",
-            minHeight: headerHeight ? `calc(100vh - ${headerHeight}px - 120px)` : "50vh",
+            paddingBottom: "4.25rem", // leave room for the reply input
             overflowY: "auto",
             display: "flex",
             flexDirection: "column",
@@ -1273,6 +1262,24 @@ export default function Home() {
           }}
           ref={messagesEndRef}
         >
+          {/* automation status pill (top-right of conversation) */}
+          <div style={{ position: 'absolute', right: '0.85rem', top: '0.6rem', zIndex: 5 }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '0.25rem 0.6rem',
+                borderRadius: '999px',
+                fontSize: '0.75rem',
+                backgroundColor: automationPaused ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
+                color: automationPaused ? '#fecaca' : '#6ee7b7',
+                border: '1px solid rgba(71,85,105,0.18)',
+                backdropFilter: 'blur(4px)'
+              }}
+            >
+              {automationPaused ? '⏸ Automation Paused' : '🟢 Automation Active'}
+            </span>
+          </div>
   {conversation.length === 0 ? (
     // EMPTY: timeline + “now you are here” + chips
     <div
@@ -1582,7 +1589,7 @@ export default function Home() {
             {/* --- END conversation block --- */}
 
             {/* Reply form */}
-            <div>
+            <div style={{ flexShrink: 0 }}>
               <form
                 onSubmit={handleSendReply}
                 style={{

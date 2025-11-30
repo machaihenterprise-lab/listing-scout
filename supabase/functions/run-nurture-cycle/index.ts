@@ -49,7 +49,7 @@ function personalize(template: string, lead: Lead): string {
   return template.replace("{{name}}", name);
 }
 
-async function sendTelnyxSms(to: string, body: string) {
+async function sendTelnyxSms(to: string, body: string, leadId?: string) {
   const res = await fetch("https://api.telnyx.com/v2/messages", {
     method: "POST",
     headers: {
@@ -67,6 +67,21 @@ async function sendTelnyxSms(to: string, body: string) {
   if (!res.ok) {
     const text = await res.text();
     console.error("Telnyx error", res.status, text);
+    // Attempt to persist the delivery error so we can count it later
+    try {
+      await supabase.from("delivery_errors").insert({
+        lead_id: leadId ?? null,
+        to_phone: to,
+        provider: "telnyx",
+        status_code: res.status,
+        error_text: text,
+        payload: { url: "https://api.telnyx.com/v2/messages", body },
+        created_at: new Date().toISOString(),
+      });
+    } catch (dbErr) {
+      console.error("Failed to log delivery error to Supabase:", dbErr);
+    }
+
     throw new Error(`Telnyx error ${res.status}`);
   }
 }
@@ -75,8 +90,6 @@ serve(async () => {
   try {
     const now = new Date();
     const nowIso = now.toISOString();
-
-    // 1) Un-snooze expired snoozes: leads that are SNOOZED but their lock expired
     try {
       const { data: expiredSnoozes, error: expiredErr } = await supabase
         .from("leads")
@@ -142,7 +155,7 @@ serve(async () => {
         const body = personalize(template, raw);
 
         // 2) Send SMS via Telnyx
-        await sendTelnyxSms(raw.phone, body);
+        await sendTelnyxSms(raw.phone, body, raw.id);
 
         const sentAt = new Date().toISOString();
         const nextAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // +24h for now

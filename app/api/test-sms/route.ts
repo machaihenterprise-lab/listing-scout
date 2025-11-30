@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 async function sendTelnyxTestSms(to: string) {
   const apiKey = process.env.TELNYX_API_KEY;
@@ -28,6 +29,25 @@ async function sendTelnyxTestSms(to: string) {
     const detail =
       telnyxJson?.errors?.[0]?.detail ||
       `Failed to send SMS via Telnyx (status ${telnyxRes.status})`;
+
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+      if (supabaseUrl && supabaseServiceKey) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        await supabase.from("delivery_errors").insert({
+          lead_id: null,
+          to_phone: to,
+          provider: "telnyx",
+          status_code: telnyxRes.status,
+          error_text: detail,
+          payload: telnyxJson ?? {},
+        });
+      }
+    } catch (dbErr) {
+      console.error("Failed to log delivery error to Supabase:", dbErr);
+    }
+
     throw new Error(detail);
   }
 }
