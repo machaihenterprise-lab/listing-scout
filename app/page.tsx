@@ -1151,7 +1151,7 @@ export default function Home() {
           )}
           {/* LEFT COLUMN: Search + Filters + Lead list (mobile: rendered after conversation) */}
           <div
-            className="h-full flex flex-col md:order-1 order-2"
+            className="ls-lead-panel h-full flex flex-col md:order-1 order-2"
             style={{
               flex: 1,
               gap: "1rem",
@@ -1431,7 +1431,7 @@ export default function Home() {
             {/* RIGHT COLUMN – Conversation (mobile: shown first) */}
             {rightTab === "conversation" && (
               <aside
-                className="h-full flex w-full flex-col md:order-2 order-1"
+                className="ls-conversation-panel h-full flex w-full flex-col md:order-2 order-1"
                 style={{
                   flex: 1.2,
                   borderRadius: "1rem",
@@ -1441,6 +1441,27 @@ export default function Home() {
                   minHeight: 0, // allow inner flex children to shrink/scroll
                 }}
               >
+            {isMobile && selectedLead ? (
+              <button
+                type="button"
+                onClick={() => setSelectedLead(null)}
+                className="ls-mobile-back"
+                style={{
+                  alignSelf: 'flex-start',
+                  marginBottom: '0.6rem',
+                  display: 'none', // default hidden; shown via media query
+                  padding: '0.35rem 0.65rem',
+                  borderRadius: '0.5rem',
+                  border: '1px solid #374151',
+                  background: 'rgba(15,23,42,0.85)',
+                  color: '#e5e7eb',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                }}
+              >
+                ← Back to leads
+              </button>
+            ) : null}
             <div
               className="ls-conversation-container"
               style={{
@@ -2111,6 +2132,18 @@ export default function Home() {
             .ls-message-bubble {
               max-width: 92% !important;
               word-break: break-word;
+            }
+
+            .ls-main-layout.detail-open .ls-lead-panel {
+              display: none;
+            }
+
+            .ls-main-layout.detail-open .ls-conversation-panel {
+              display: flex;
+            }
+
+            .ls-mobile-back {
+              display: inline-flex !important;
             }
 
             /* Make sure message + lead lists scroll nicely on mobile */
