@@ -609,6 +609,8 @@ export default function Home() {
     setShouldAutoselectLead(true);
     setSelectedLead(lead);
     setMessage(null);
+    // mark unread as read locally
+    setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, has_unread_messages: false } : l)));
     // messages + polling are handled by the effect below; this call
     // gives you a snappier initial load when switching leads:
     await fetchMessages(lead.id);
@@ -1609,6 +1611,7 @@ export default function Home() {
                   {filteredLeads.map((lead) => {
                     const isSelected = selectedLead?.id === lead.id;
                     const isHot = (lead.status || "").toUpperCase() === "HOT";
+                    const hasUnread = !!lead.has_unread_messages;
                     const lastActivity =
                       lead.lastContactedAt ||
                       lead.last_agent_sent_at ||
@@ -1661,14 +1664,15 @@ export default function Home() {
                             <strong style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
                               {isHot ? "🔥" : null}
                               {lead.name || "Unnamed lead"}
-                              {lead.has_unread_messages ? (
+                              {hasUnread ? (
                                 <span
                                   style={{
-                                    minWidth: '10px',
-                                    height: '10px',
+                                    minWidth: '12px',
+                                    height: '12px',
                                     borderRadius: '999px',
                                     backgroundColor: '#ef4444',
                                     display: 'inline-block',
+                                    boxShadow: '0 0 0 4px rgba(239,68,68,0.18)',
                                   }}
                                   title="Unread messages"
                                 />
@@ -1697,7 +1701,7 @@ export default function Home() {
                         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                             <StatusPill status={lead.status} />
-                            {isHot && lead.has_unread_messages ? (
+                            {isHot && hasUnread ? (
                               <span style={{ fontSize: '0.75rem', color: '#fecdd3', padding: '0.25rem 0.55rem', borderRadius: '0.5rem', border: '1px solid rgba(248,113,113,0.45)', background: 'rgba(248,113,113,0.18)' }}>
                                 PRIORITY RESPONSE
                               </span>
