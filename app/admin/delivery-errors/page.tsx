@@ -2,7 +2,12 @@ import React from "react";
 import { cookies } from "next/headers";
 import LoginForm from "./LoginForm";
 import Actions from "./Actions";
-import { DashboardDailyTasks } from "../../DashboardDaily/Tasks";
+import dynamic from "next/dynamic";
+
+const DashboardDailyTasks = dynamic(
+  () => import("../../DashboardDaily/Tasks").then((m) => m.DashboardDailyTasks),
+  { ssr: false }
+);
 
 type DeliveryError = {
   id: string;
