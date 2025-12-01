@@ -2,6 +2,7 @@ import React from "react";
 import { cookies } from "next/headers";
 import LoginForm from "./LoginForm";
 import Actions from "./Actions";
+import { DashboardDailyTasks } from "./DashboardDailyTasks";
 
 type DeliveryError = {
   id: string;
@@ -69,6 +70,9 @@ export default async function Page() {
       <p className="mt-2 text-sm text-gray-600">Showing the latest 50 delivery error records.</p>
 
       <Actions />
+      <div className="mt-6">
+        <DashboardDailyTasks />
+      </div>
 
       <div className="mt-4 overflow-auto">
         <table className="w-full text-sm table-auto border-collapse">

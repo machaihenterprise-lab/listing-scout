@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { LeadNotes } from "./LeadNotes";
+import { LeadProfile } from "./LeadProfile";
 
 type Lead = {
   id: string;
@@ -30,6 +31,12 @@ type Lead = {
   has_unread_messages?: boolean | null;
   target_area?: string | null;
   budget?: string | null;
+  // Profile fields
+  target_budget_min?: number | null;
+  target_budget_max?: number | null;
+  target_areas?: string | null;
+  target_property_type?: string | null;
+  move_timeline?: string | null;
 };
 
 type MessageRow = {
@@ -42,6 +49,16 @@ type MessageRow = {
   message_type?: string | null;
   is_private?: boolean | null;
   sender_type?: string | null;
+};
+
+type Task = {
+  id: string;
+  lead_id: string;
+  description?: string | null;
+  title?: string | null;
+  due_at: string | null;
+  status?: string | null;
+  is_completed?: boolean | null;
 };
 
 /* ------------------------------------------------------------------ */
@@ -284,11 +301,9 @@ export default function Home() {
   const [taskDescription, setTaskDescription] = useState("");
   const [taskDueAt, setTaskDueAt] = useState("");
   const [taskSaving, setTaskSaving] = useState(false);
-  // Profile tab state
-  const [profileSource, setProfileSource] = useState("");
-  const [profileTargetArea, setProfileTargetArea] = useState("");
-  const [profileBudget, setProfileBudget] = useState("");
-  const [profileSaving, setProfileSaving] = useState(false);
+  const [dailyTasks, setDailyTasks] = useState<Task[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  // Profile tab state (editable)
 
   const scrollToBottom = useCallback((force = false) => {
     const el = messagesEndRef.current;
@@ -373,6 +388,11 @@ export default function Home() {
           has_unread_messages: (r.has_unread_messages as boolean) ?? false,
           target_area: (r as Record<string, unknown>)['target_area'] as string ?? null,
           budget: (r as Record<string, unknown>)['budget'] as string ?? null,
+          target_budget_min: (r as Record<string, unknown>)['target_budget_min'] as number ?? null,
+          target_budget_max: (r as Record<string, unknown>)['target_budget_max'] as number ?? null,
+          target_areas: (r as Record<string, unknown>)['target_areas'] as string ?? null,
+          target_property_type: (r as Record<string, unknown>)['target_property_type'] as string ?? null,
+          move_timeline: (r as Record<string, unknown>)['move_timeline'] as string ?? null,
         } as Lead;
       });
 
@@ -443,17 +463,19 @@ export default function Home() {
         // After messages render, schedule a double requestAnimationFrame to ensure
         // layout is settled before scrolling. Use a direct scroll here to avoid
         // adding `scrollToBottom` to the callback deps.
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            const el = messagesEndRef.current;
-            if (!el) return;
-            try {
-              el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-            } catch {
-              el.scrollTop = el.scrollHeight;
-            }
-          }),
-        );
+        if (mapped.length > 0) {
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              const el = messagesEndRef.current;
+              if (!el) return;
+              try {
+                el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+              } catch {
+                el.scrollTop = el.scrollHeight;
+              }
+            }),
+          );
+        }
       } catch (err: unknown) {
         console.error("Error loading messages:", err);
         const msg = err instanceof Error ? err.message : String(err);
@@ -462,6 +484,49 @@ export default function Home() {
     },
     []
   );
+
+  const fetchDailyTasks = useCallback(async () => {
+    setLoadingTasks(true);
+    try {
+      const endOfToday = (() => {
+        const d = new Date();
+        d.setHours(23, 59, 59, 999);
+        return d;
+      })();
+
+      const { data, error } = await supabase!
+        .from("tasks")
+        .select("*")
+        .order("due_at", { ascending: true });
+
+      if (error) {
+        const msg = (error as { message?: string })?.message || "Unknown error";
+        setMessage((prev) => prev ?? `Error loading tasks: ${msg}`);
+        return;
+      }
+
+      const filtered = (data as Task[]).filter((t) => {
+        if (!t.due_at) return false;
+        const due = new Date(t.due_at);
+        if (Number.isNaN(due.getTime())) return false;
+        // due today or overdue
+        return due.getTime() <= endOfToday.getTime();
+      });
+
+      // drop completed tasks
+      const openTasks = filtered.filter((t) => {
+        const status = (t.status || "").toUpperCase();
+        return !t.is_completed && status !== "DONE" && status !== "COMPLETED";
+      });
+
+      setDailyTasks(openTasks.slice(0, 10)); // keep list short
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setMessage((prev) => prev ?? `Error loading tasks: ${msg}`);
+    } finally {
+      setLoadingTasks(false);
+    }
+  }, []);
 
   // Snooze handlers
   const handleSnooze = async (targetDate: Date) => {
@@ -786,44 +851,6 @@ export default function Home() {
   return false;
 };
 
-  const handleSaveProfile = async () => {
-    if (!selectedLead) {
-      setMessage("Select a lead first.");
-      return;
-    }
-    setProfileSaving(true);
-    setMessage(null);
-    try {
-      const { error } = await supabase!
-        .from("leads")
-        .update({
-          source: profileSource || null,
-          target_area: profileTargetArea || null,
-          budget: profileBudget || null,
-        })
-        .eq("id", selectedLead.id);
-
-      if (error) {
-        setMessage(error.message || "Error saving profile");
-        return;
-      }
-
-      setMessage("Profile saved.");
-      setSelectedLead({
-        ...selectedLead,
-        source: profileSource || null,
-        target_area: profileTargetArea || null,
-        budget: profileBudget || null,
-      });
-      await fetchLeads();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setMessage(msg || "Error saving profile");
-    } finally {
-      setProfileSaving(false);
-    }
-  };
-
 
   // sendTestSms removed — test button UI removed from the conversation pane.
 
@@ -864,6 +891,7 @@ export default function Home() {
     fetchLeads();
     // initial fetch
     fetchActivity();
+    fetchDailyTasks();
 
     // Poll every 5 minutes so the activity card stays up-to-date.
     const POLL_MS = 5 * 60 * 1000;
@@ -872,17 +900,14 @@ export default function Home() {
     }, POLL_MS);
 
     return () => window.clearInterval(id);
-  }, [fetchLeads, fetchActivity]);
+  }, [fetchLeads, fetchActivity, fetchDailyTasks]);
 
   // When selected lead changes, un-pause automation
   useEffect(() => {
     if (!selectedLead?.id) return;
     // Derive paused state from lead.nurture_status so UI reflects DB
     setAutomationPaused((selectedLead.nurture_status || "").toUpperCase() === "PAUSED");
-    setProfileSource(selectedLead.source || "");
-    setProfileTargetArea(selectedLead.target_area || "");
-    setProfileBudget(selectedLead.budget || "");
-  }, [selectedLead?.id, selectedLead?.nurture_status, selectedLead?.source, selectedLead?.target_area, selectedLead?.budget]);
+  }, [selectedLead?.id, selectedLead?.nurture_status]);
 
   // When a lead is selected:
   // - load messages immediately
@@ -923,12 +948,14 @@ export default function Home() {
 
   // Auto-scroll chat container to bottom whenever conversation updates
   useEffect(() => {
+    const hasMessages = conversation.some((m) => !selectedLead || m.lead_id === selectedLead.id);
+    if (!hasMessages) return;
     // Use the central helper which obeys `isScrolledUp` and `autoScrollAlways`.
     // Run in rAF to ensure DOM layout is ready.
     requestAnimationFrame(() => {
       scrollToBottom(false);
     });
-  }, [conversation, scrollToBottom]);
+  }, [conversation, scrollToBottom, selectedLead]);
 
   // Focus the Quick Add name input when the quick-add panel opens
   useEffect(() => {
@@ -1311,6 +1338,103 @@ export default function Home() {
           >
             {/* Search + Tabs */}
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              {/* Daily Action Items */}
+              <div
+                style={{
+                  padding: "0.75rem",
+                  borderRadius: "0.75rem",
+                  border: "1px solid #1f2937",
+                  background: "rgba(15,23,42,0.65)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.4rem",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span style={{ fontWeight: 700 }}>Daily Action Items</span>
+                  <span style={{ fontSize: "0.85rem", color: "#9ca3af" }}>Due today or overdue</span>
+                </div>
+                {loadingTasks ? (
+                  <div style={{ color: "#9ca3af", fontSize: "0.9rem" }}>Loading tasks…</div>
+                ) : dailyTasks.length === 0 ? (
+                  <div style={{ color: "#9ca3af", fontSize: "0.9rem" }}>No tasks due today.</div>
+                ) : (
+                  <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                    {dailyTasks.map((task) => {
+                      const lead = leads.find((l) => l.id === task.lead_id);
+                      const dueDate = task.due_at ? new Date(task.due_at) : null;
+                      const isOverdue = dueDate ? dueDate.getTime() < Date.now() : false;
+                      return (
+                        <li
+                          key={task.id}
+                          style={{
+                            border: isOverdue ? "1px solid rgba(248,113,113,0.6)" : "1px solid #273349",
+                            borderRadius: "0.65rem",
+                            padding: "0.55rem 0.65rem",
+                            background: isOverdue ? "rgba(248,113,113,0.08)" : "rgba(17,24,39,0.75)",
+                            display: "flex",
+                            gap: "0.6rem",
+                            alignItems: "center",
+                          }}
+                        >
+                          <div
+                            style={{ flex: 1, cursor: lead ? "pointer" : "default" }}
+                            onClick={() => {
+                              if (lead) {
+                                handleSelectLead(lead);
+                                setRightTab('conversation');
+                              }
+                            }}
+                          >
+                            <div style={{ fontWeight: 600, color: "#e5e7eb" }}>
+                              {(task.description || task.title || "Untitled task")}{" "}
+                              {lead ? `for ${lead.name || "Lead"}` : ""}
+                            </div>
+                            <div style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>
+                              Due: {task.due_at ? formatShortDateTime(task.due_at) : "—"}
+                            </div>
+                          </div>
+                          <label
+                            title="Mark complete"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              width: "30px",
+                              height: "30px",
+                              borderRadius: "0.5rem",
+                              border: "1px solid rgba(148,163,184,0.4)",
+                              background: "rgba(15,23,42,0.9)",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              onChange={async () => {
+                                try {
+                                  const { error } = await supabase!
+                                    .from("tasks")
+                                    .update({ is_completed: true, status: "COMPLETED" })
+                                    .eq("id", task.id);
+                                  if (error) {
+                                    setMessage((prev) => prev ?? error.message);
+                                    return;
+                                  }
+                                  setDailyTasks((prev) => prev.filter((t) => t.id !== task.id));
+                                } catch (err) {
+                                  setMessage((prev) => prev ?? (err instanceof Error ? err.message : String(err)));
+                                }
+                              }}
+                              style={{ width: "20px", height: "20px" }}
+                            />
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+
               <input
                 type="search"
                 value={searchTerm}
@@ -1811,6 +1935,7 @@ export default function Home() {
                       setTaskModalOpen(true);
                       setTaskDescription("");
                       setTaskDueAt("");
+                      fetchDailyTasks();
                     }}
                     title="Add Task / Reminder"
                     style={{
@@ -2070,17 +2195,23 @@ export default function Home() {
                                 style={{
                                   padding: "0.5rem 1rem",
                                   borderRadius: "999px",
-                                  border: "1px solid #3b82f6",
-                                  backgroundColor: "rgba(59,130,246,0.2)",
-                                  color: "#bfdbfe",
-                                  fontSize: "0.95rem",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                + Add Follow-Up Task
-                              </button>
-                            </div>
-                          </div>
+                              border: "1px solid #3b82f6",
+                              backgroundColor: "rgba(59,130,246,0.2)",
+                              color: "#bfdbfe",
+                              fontSize: "0.95rem",
+                              cursor: "pointer",
+                            }}
+                            onClick={() => {
+                              setMessage(null);
+                              setTaskModalOpen(true);
+                              setTaskDescription("");
+                              setTaskDueAt("");
+                            }}
+                          >
+                            + Add Follow-Up Task
+                          </button>
+                        </div>
+                      </div>
                         </div>
                       ) : (
                         // NON-EMPTY: show actual messages
@@ -2259,138 +2390,9 @@ export default function Home() {
                     )}
                   </div>
                 ) : (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div style={{ flex: 1 }}>
                     {selectedLead ? (
-                      <>
-                        <div
-                          style={{
-                            border: "1px solid #1f2937",
-                            borderRadius: "0.75rem",
-                            padding: "0.85rem",
-                            background: "rgba(15,23,42,0.65)",
-                          }}
-                        >
-                          <h4 style={{ margin: 0, marginBottom: "0.5rem" }}>Lead Profile</h4>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.6rem" }}>
-                            <div>
-                              <label style={{ display: "block", color: "#cbd5e1", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Source</label>
-                              <input
-                                type="text"
-                                value={profileSource}
-                                onChange={(e) => setProfileSource(e.target.value)}
-                                style={{
-                                  width: "100%",
-                                  padding: "0.5rem 0.65rem",
-                                  borderRadius: "0.55rem",
-                                  border: "1px solid #374151",
-                                  background: "rgba(15,23,42,0.9)",
-                                  color: "#f9fafb",
-                                }}
-                                placeholder="Website, Zillow, Manual"
-                              />
-                            </div>
-                            <div>
-                              <label style={{ display: "block", color: "#cbd5e1", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Target Area</label>
-                              <input
-                                type="text"
-                                value={profileTargetArea}
-                                onChange={(e) => setProfileTargetArea(e.target.value)}
-                                style={{
-                                  width: "100%",
-                                  padding: "0.5rem 0.65rem",
-                                  borderRadius: "0.55rem",
-                                  border: "1px solid #374151",
-                                  background: "rgba(15,23,42,0.9)",
-                                  color: "#f9fafb",
-                                }}
-                                placeholder="Interested in Downtown Condos"
-                              />
-                            </div>
-                            <div>
-                              <label style={{ display: "block", color: "#cbd5e1", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Budget</label>
-                              <input
-                                type="text"
-                                value={profileBudget}
-                                onChange={(e) => setProfileBudget(e.target.value)}
-                                style={{
-                                  width: "100%",
-                                  padding: "0.5rem 0.65rem",
-                                  borderRadius: "0.55rem",
-                                  border: "1px solid #374151",
-                                  background: "rgba(15,23,42,0.9)",
-                                  color: "#f9fafb",
-                                }}
-                                placeholder="$500k – $650k"
-                              />
-                            </div>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "0.75rem" }}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setProfileSource(selectedLead.source || "");
-                                setProfileTargetArea(selectedLead.target_area || "");
-                                setProfileBudget(selectedLead.budget || "");
-                              }}
-                              style={{
-                                padding: "0.45rem 0.7rem",
-                                borderRadius: "0.55rem",
-                                border: "1px solid #374151",
-                                background: "transparent",
-                                color: "#9ca3af",
-                                cursor: "pointer",
-                              }}
-                            >
-                              Reset
-                            </button>
-                            <button
-                              type="button"
-                              disabled={profileSaving}
-                              onClick={handleSaveProfile}
-                              style={{
-                                padding: "0.45rem 0.95rem",
-                                borderRadius: "0.55rem",
-                                border: "1px solid #2563eb",
-                                background: profileSaving ? "rgba(37,99,235,0.4)" : "rgba(37,99,235,0.9)",
-                                color: "#fff",
-                                cursor: profileSaving ? "default" : "pointer",
-                              }}
-                            >
-                              {profileSaving ? "Saving..." : "Save Profile"}
-                            </button>
-                          </div>
-                        </div>
-                        <div
-                          style={{
-                            border: "1px solid #1f2937",
-                            borderRadius: "0.75rem",
-                            padding: "0.85rem",
-                            background: "rgba(15,23,42,0.5)",
-                          }}
-                        >
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.6rem" }}>
-                            <div>
-                              <div style={{ color: "#9ca3af", fontSize: "0.85rem" }}>Created</div>
-                              <div style={{ color: "#e5e7eb" }}>
-                                {selectedLead.created_at ? formatShortDateTime(selectedLead.created_at) : "—"}
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{ color: "#9ca3af", fontSize: "0.85rem" }}>Status</div>
-                              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#e5e7eb" }}>
-                                <StatusPill status={selectedLead.status} />
-                                <span>{selectedLead.nurture_status || "Nurture"}</span>
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{ color: "#9ca3af", fontSize: "0.85rem" }}>Next nurture</div>
-                              <div style={{ color: "#e5e7eb" }}>
-                                {selectedLead.next_nurture_at ? formatShortDateTime(selectedLead.next_nurture_at) : "—"}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </>
+                      <LeadProfile leadId={selectedLead.id} />
                     ) : (
                       <div style={{ color: '#9ca3af' }}>Select a lead to view profile.</div>
                     )}
@@ -2603,11 +2605,11 @@ export default function Home() {
               ) : (
                 <>
                   <div style={{ marginBottom: "0.75rem" }}>
-                    <label style={{ display: "block", color: "#cbd5e1", marginBottom: "0.25rem" }}>Task description</label>
-                    <textarea
+                    <label style={{ display: "block", color: "#cbd5e1", marginBottom: "0.25rem" }}>Task title</label>
+                    <input
+                      type="text"
                       value={taskDescription}
                       onChange={(e) => setTaskDescription(e.target.value)}
-                      rows={3}
                       style={{
                         width: "100%",
                         padding: "0.55rem 0.65rem",
@@ -2615,9 +2617,8 @@ export default function Home() {
                         border: "1px solid #374151",
                         background: "rgba(15,23,42,0.9)",
                         color: "#f9fafb",
-                        resize: "vertical",
                       }}
-                      placeholder="Follow up with financing next Tuesday"
+                      placeholder="Call about pricing strategy"
                     />
                   </div>
                   <div style={{ marginBottom: "0.75rem" }}>
@@ -2681,6 +2682,7 @@ export default function Home() {
                           setTaskModalOpen(false);
                           setTaskDescription("");
                           setTaskDueAt("");
+                          fetchDailyTasks();
                         } catch (err: unknown) {
                           console.error("Error saving task:", err);
                           const msg = err instanceof Error ? err.message : String(err);
@@ -2717,7 +2719,24 @@ export default function Home() {
           @media (max-width: 900px) {
             .ls-main-layout {
               flex-direction: column;
-}
+              height: auto;
+            }
+            .ls-conversation-panel {
+              padding: 0.85rem;
+            }
+            .ls-lead-panel,
+            .ls-conversation-panel {
+              width: 100%;
+            }
+            .ls-lead-list {
+              max-height: none;
+            }
+            .ls-main-layout.detail-open .ls-lead-panel {
+              display: none;
+            }
+            .ls-main-layout.detail-open .ls-conversation-panel {
+              display: flex;
+            }
           }
 
           .ls-activity-badge {
