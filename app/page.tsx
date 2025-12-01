@@ -28,6 +28,8 @@ type Lead = {
 
   lastContactedAt?: string | null; // mapped from last_contacted_at
   has_unread_messages?: boolean | null;
+  target_area?: string | null;
+  budget?: string | null;
 };
 
 type MessageRow = {
@@ -164,6 +166,25 @@ function formatShortDateTime(dateString: string | null | undefined) {
   return `${datePart} at ${timePart}`;
 }
 
+function formatRelativeTime(dateString: string | null | undefined) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  const now = Date.now();
+  const diffMs = now - date.getTime();
+  if (Number.isNaN(diffMs) || diffMs < 0) return "";
+
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const minutes = Math.floor(diffSeconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
+}
+
+
 /* ------------------------------------------------------------------ */
 /* Main Page                                                          */
 /* ------------------------------------------------------------------ */
@@ -221,7 +242,7 @@ export default function Home() {
   const hasActivity = !!activity && ((activity.nurtureTexts || 0) > 0 || (activity.newLeads || 0) > 0 || (activity.errors || 0) > 0);
 
   // Right column tab state (conversation vs notes)
-  const [rightTab, setRightTab] = useState<'conversation' | 'notes'>('conversation');
+  const [rightTab, setRightTab] = useState<'conversation' | 'notes' | 'profile'>('conversation');
 
   // Mobile master/detail control: when a lead is selected we treat that
   // as the "detail" view on small screens.
@@ -258,6 +279,16 @@ export default function Home() {
   const [autoScrollAlways, setAutoScrollAlways] = useState(false);
   const [shouldAutoselectLead, setShouldAutoselectLead] = useState(true); // prevents re-auto-select after mobile back
   const [showNotesInline, setShowNotesInline] = useState(true);
+  // Task modal state
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskDueAt, setTaskDueAt] = useState("");
+  const [taskSaving, setTaskSaving] = useState(false);
+  // Profile tab state
+  const [profileSource, setProfileSource] = useState("");
+  const [profileTargetArea, setProfileTargetArea] = useState("");
+  const [profileBudget, setProfileBudget] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
 
   const scrollToBottom = useCallback((force = false) => {
     const el = messagesEndRef.current;
@@ -340,6 +371,8 @@ export default function Home() {
 
           lastContactedAt: ((r as Record<string, unknown>)['last_contacted_at'] as string) ?? null,
           has_unread_messages: (r.has_unread_messages as boolean) ?? false,
+          target_area: (r as Record<string, unknown>)['target_area'] as string ?? null,
+          budget: (r as Record<string, unknown>)['budget'] as string ?? null,
         } as Lead;
       });
 
@@ -363,66 +396,72 @@ export default function Home() {
   }, [selectedLead, leadFilter, shouldAutoselectLead]);
 
   const fetchMessages = useCallback(
-  async (leadId: string) => {
-    console.log("[fetchMessages] for lead", leadId);
+    async (leadId: string) => {
+      try {
+        console.log("[fetchMessages] for lead", leadId);
 
-    // Query messages for the specific lead only so the conversation pane
-    // shows messages belonging to the selected lead (filter by lead_id).
-    const { data, error } = await supabase!
-      .from("messages")
-      .select("*")
-      .eq("lead_id", leadId)
-      .order("created_at", { ascending: true });
+        // Query messages for the specific lead only so the conversation pane
+        // shows messages belonging to the selected lead (filter by lead_id).
+        const { data, error } = await supabase!
+          .from("messages")
+          .select("*")
+          .eq("lead_id", leadId)
+          .order("created_at", { ascending: true });
 
-    console.log("[fetchMessages] result", { error, data });
+        console.log("[fetchMessages] result", { error, data });
 
-    if (error) {
-      console.error("Error loading messages:", error);
-      setMessage(`Error loading messages: ${error.message}`);
-      return;
-    }
-
-    const mapped = (data || []).map((raw: Record<string, unknown>) => {
-      const inferredType =
-        (raw["message_type"] as string | undefined) ??
-        (raw["type"] as string | undefined) ??
-        (raw["channel"] === "note" ? "NOTE" : undefined) ??
-        (raw["is_private"] ? "NOTE" : null);
-
-      return {
-        id: (raw["id"] as string) || "",
-        lead_id: (raw["lead_id"] as string) || leadId,
-        direction: ((raw["direction"] as string) || "INBOUND") as MessageRow["direction"],
-        channel: (raw["channel"] as string) ?? null,
-        body: (raw["body"] as string) || "",
-        created_at: (raw["created_at"] as string) || "",
-        message_type: inferredType,
-        is_private:
-          (raw["is_private"] as boolean) ??
-          (inferredType === "NOTE" || raw["channel"] === "note"),
-        sender_type: (raw["sender_type"] as string) ?? undefined,
-      } as MessageRow;
-    });
-
-    setConversation(mapped);
-
-    // After messages render, schedule a double requestAnimationFrame to ensure
-    // layout is settled before scrolling. Use a direct scroll here to avoid
-    // adding `scrollToBottom` to the callback deps.
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        const el = messagesEndRef.current;
-        if (!el) return;
-        try {
-          el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-        } catch {
-          el.scrollTop = el.scrollHeight;
+        if (error) {
+          console.error("Error loading messages:", error);
+          setMessage(`Error loading messages: ${error.message || "Unknown error"}`);
+          return;
         }
-      }),
-    );
-  },
-  []
-);
+
+        const mapped = (data || []).map((raw: Record<string, unknown>) => {
+          const inferredType =
+            (raw["message_type"] as string | undefined) ??
+            (raw["type"] as string | undefined) ??
+            (raw["channel"] === "note" ? "NOTE" : undefined) ??
+            (raw["is_private"] ? "NOTE" : null);
+
+          return {
+            id: (raw["id"] as string) || "",
+            lead_id: (raw["lead_id"] as string) || leadId,
+            direction: ((raw["direction"] as string) || "INBOUND") as MessageRow["direction"],
+            channel: (raw["channel"] as string) ?? null,
+            body: (raw["body"] as string) || "",
+            created_at: (raw["created_at"] as string) || "",
+            message_type: inferredType,
+            is_private:
+              (raw["is_private"] as boolean) ??
+              (inferredType === "NOTE" || raw["channel"] === "note"),
+            sender_type: (raw["sender_type"] as string) ?? undefined,
+          } as MessageRow;
+        });
+
+        setConversation(mapped);
+
+        // After messages render, schedule a double requestAnimationFrame to ensure
+        // layout is settled before scrolling. Use a direct scroll here to avoid
+        // adding `scrollToBottom` to the callback deps.
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            const el = messagesEndRef.current;
+            if (!el) return;
+            try {
+              el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+            } catch {
+              el.scrollTop = el.scrollHeight;
+            }
+          }),
+        );
+      } catch (err: unknown) {
+        console.error("Error loading messages:", err);
+        const msg = err instanceof Error ? err.message : String(err);
+        setMessage(`Error loading messages: ${msg || "Unknown error"}`);
+      }
+    },
+    []
+  );
 
   // Snooze handlers
   const handleSnooze = async (targetDate: Date) => {
@@ -747,6 +786,44 @@ export default function Home() {
   return false;
 };
 
+  const handleSaveProfile = async () => {
+    if (!selectedLead) {
+      setMessage("Select a lead first.");
+      return;
+    }
+    setProfileSaving(true);
+    setMessage(null);
+    try {
+      const { error } = await supabase!
+        .from("leads")
+        .update({
+          source: profileSource || null,
+          target_area: profileTargetArea || null,
+          budget: profileBudget || null,
+        })
+        .eq("id", selectedLead.id);
+
+      if (error) {
+        setMessage(error.message || "Error saving profile");
+        return;
+      }
+
+      setMessage("Profile saved.");
+      setSelectedLead({
+        ...selectedLead,
+        source: profileSource || null,
+        target_area: profileTargetArea || null,
+        budget: profileBudget || null,
+      });
+      await fetchLeads();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setMessage(msg || "Error saving profile");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
 
   // sendTestSms removed — test button UI removed from the conversation pane.
 
@@ -802,7 +879,10 @@ export default function Home() {
     if (!selectedLead?.id) return;
     // Derive paused state from lead.nurture_status so UI reflects DB
     setAutomationPaused((selectedLead.nurture_status || "").toUpperCase() === "PAUSED");
-  }, [selectedLead?.id, selectedLead?.nurture_status]);
+    setProfileSource(selectedLead.source || "");
+    setProfileTargetArea(selectedLead.target_area || "");
+    setProfileBudget(selectedLead.budget || "");
+  }, [selectedLead?.id, selectedLead?.nurture_status, selectedLead?.source, selectedLead?.target_area, selectedLead?.budget]);
 
   // When a lead is selected:
   // - load messages immediately
@@ -1404,25 +1484,38 @@ export default function Home() {
                 <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                   {filteredLeads.map((lead) => {
                     const isSelected = selectedLead?.id === lead.id;
+                    const isHot = (lead.status || "").toUpperCase() === "HOT";
+                    const lastActivity =
+                      lead.lastContactedAt ||
+                      lead.last_agent_sent_at ||
+                      lead.last_nurture_sent_at ||
+                      lead.created_at ||
+                      null;
                     return (
                       <li
                         key={lead.id}
                         onClick={() => handleSelectLead(lead)}
                         style={{
-                          padding: "0.75rem 1rem",
-                          borderRadius: "0.75rem",
-                          marginBottom: "0.5rem",
+                          padding: "0.85rem 1rem",
+                          borderRadius: "0.9rem",
+                          marginBottom: "0.6rem",
                           cursor: "pointer",
                           display: "flex",
                           justifyContent: "space-between",
                           alignItems: "center",
-                          // When selected, use a slightly lighter gray and add
-                          // a yellow accent bar on the left to visually anchor
-                          // the selected lead to the conversation on the right.
-                          backgroundColor: isSelected ? "#1f2937" : "rgba(15,23,42,0.6)",
-                          border: isSelected ? "1px solid rgba(255,255,255,0.03)" : "1px solid #374151",
-                          borderLeft: isSelected ? "4px solid #f59e0b" : undefined,
-                          transition: "background-color 140ms ease, border-left-color 140ms ease",
+                          background: isHot
+                            ? "linear-gradient(135deg, rgba(248,113,113,0.25), rgba(239,68,68,0.3))"
+                            : isSelected
+                              ? "#1f2937"
+                              : "rgba(15,23,42,0.6)",
+                          border: isSelected
+                            ? "1px solid rgba(255,255,255,0.05)"
+                            : isHot
+                              ? "1px solid rgba(248,113,113,0.6)"
+                              : "1px solid #374151",
+                          borderLeft: isSelected ? "4px solid #f59e0b" : isHot ? "4px solid #ef4444" : undefined,
+                          boxShadow: isHot ? "0 10px 24px rgba(239,68,68,0.25)" : "none",
+                          transition: "background-color 140ms ease, border-left-color 140ms ease, box-shadow 140ms ease",
                         }}
                       >
                         <div>
@@ -1441,16 +1534,50 @@ export default function Home() {
                               />
                             ) : null}
 
-                            <strong>{lead.name || "Unnamed lead"}</strong>
+                            <strong style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                              {isHot ? "🔥" : null}
+                              {lead.name || "Unnamed lead"}
+                              {lead.has_unread_messages ? (
+                                <span
+                                  style={{
+                                    minWidth: '10px',
+                                    height: '10px',
+                                    borderRadius: '999px',
+                                    backgroundColor: '#ef4444',
+                                    display: 'inline-block',
+                                  }}
+                                  title="Unread messages"
+                                />
+                              ) : null}
+                            </strong>
                           </div>
 
-                          <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>{lead.phone}</div>
-                          {lead.email && <div style={{ fontSize: "0.8rem", opacity: 0.8 }}>{lead.email}</div>}
+                          <div style={{ fontSize: "1rem", fontWeight: isHot ? 700 : 500, opacity: 0.95 }}>
+                            {lead.phone ? (
+                              <a
+                                href={`tel:${lead.phone}`}
+                                style={{ color: "#e5e7eb", textDecoration: "none" }}
+                              >
+                                {lead.phone}
+                              </a>
+                            ) : (
+                              <span style={{ color: "#9ca3af", fontSize: "0.9rem" }}>No phone</span>
+                            )}
+                          </div>
+                            {lead.email && <div style={{ fontSize: "0.8rem", opacity: 0.8 }}>{lead.email}</div>}
+                          <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.1rem' }}>
+                            {lastActivity ? `Last activity: ${formatRelativeTime(lastActivity)}` : "No activity yet"}
+                          </div>
                         </div>
 
                         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                             <StatusPill status={lead.status} />
+                            {isHot && lead.has_unread_messages ? (
+                              <span style={{ fontSize: '0.75rem', color: '#fecdd3', padding: '0.25rem 0.55rem', borderRadius: '0.5rem', border: '1px solid rgba(248,113,113,0.45)', background: 'rgba(248,113,113,0.18)' }}>
+                                PRIORITY RESPONSE
+                              </span>
+                            ) : null}
                             {lead.nurture_locked_until && new Date(lead.nurture_locked_until).getTime() <= Date.now() && (
                               <span style={{ fontSize: '0.7rem', color: '#f59e0b', padding: '0.25rem 0.5rem', borderRadius: '0.4rem', border: '1px solid rgba(245,158,11,0.18)' }}>
                                 Snooze expired
@@ -1657,11 +1784,50 @@ export default function Home() {
                       alignItems: 'center',
                       gap: '0.4rem',
                     }}
+                    >
+                      🔒 Notes
+                      <span style={{ fontSize: '0.78rem', padding: '0.1rem 0.55rem', borderRadius: '999px', background: privateNotes.length > 0 ? 'rgba(16,185,129,0.25)' : 'rgba(148,163,184,0.18)', color: '#bbf7d0', border: '1px solid rgba(16,185,129,0.35)' }}>
+                        {privateNotes.length}
+                      </span>
+                    </button>
+                  <button
+                    type="button"
+                    onClick={() => setRightTab('profile')}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '0.6rem',
+                      border: rightTab === 'profile' ? '1px solid rgba(59,130,246,0.6)' : '1px solid #374151',
+                      background: rightTab === 'profile' ? 'rgba(59,130,246,0.15)' : 'rgba(15,23,42,0.8)',
+                      color: '#e5e7eb',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                    }}
                   >
-                    🔒 Notes
-                    <span style={{ fontSize: '0.78rem', padding: '0.1rem 0.55rem', borderRadius: '999px', background: privateNotes.length > 0 ? 'rgba(16,185,129,0.25)' : 'rgba(148,163,184,0.18)', color: '#bbf7d0', border: '1px solid rgba(16,185,129,0.35)' }}>
-                      {privateNotes.length}
-                    </span>
+                    🗂 Profile
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTaskModalOpen(true);
+                      setTaskDescription("");
+                      setTaskDueAt("");
+                    }}
+                    title="Add Task / Reminder"
+                    style={{
+                      marginLeft: 'auto',
+                      padding: '0.35rem 0.7rem',
+                      borderRadius: '0.6rem',
+                      border: '1px solid #374151',
+                      background: 'rgba(37,99,235,0.15)',
+                      color: '#bfdbfe',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                    }}
+                  >
+                    🕑 Add Task
                   </button>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem', justifyContent: 'flex-end' }}>
@@ -2082,13 +2248,151 @@ export default function Home() {
                         conversation above.
                       </p>
                     </div>
+
                   </>
-                ) : (
+                ) : rightTab === "notes" ? (
                   <div style={{ flex: 1 }}>
                     {selectedLead ? (
                       <LeadNotes leadId={selectedLead.id} />
                     ) : (
                       <div style={{ color: '#9ca3af' }}>Select a lead to view notes.</div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {selectedLead ? (
+                      <>
+                        <div
+                          style={{
+                            border: "1px solid #1f2937",
+                            borderRadius: "0.75rem",
+                            padding: "0.85rem",
+                            background: "rgba(15,23,42,0.65)",
+                          }}
+                        >
+                          <h4 style={{ margin: 0, marginBottom: "0.5rem" }}>Lead Profile</h4>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.6rem" }}>
+                            <div>
+                              <label style={{ display: "block", color: "#cbd5e1", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Source</label>
+                              <input
+                                type="text"
+                                value={profileSource}
+                                onChange={(e) => setProfileSource(e.target.value)}
+                                style={{
+                                  width: "100%",
+                                  padding: "0.5rem 0.65rem",
+                                  borderRadius: "0.55rem",
+                                  border: "1px solid #374151",
+                                  background: "rgba(15,23,42,0.9)",
+                                  color: "#f9fafb",
+                                }}
+                                placeholder="Website, Zillow, Manual"
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: "block", color: "#cbd5e1", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Target Area</label>
+                              <input
+                                type="text"
+                                value={profileTargetArea}
+                                onChange={(e) => setProfileTargetArea(e.target.value)}
+                                style={{
+                                  width: "100%",
+                                  padding: "0.5rem 0.65rem",
+                                  borderRadius: "0.55rem",
+                                  border: "1px solid #374151",
+                                  background: "rgba(15,23,42,0.9)",
+                                  color: "#f9fafb",
+                                }}
+                                placeholder="Interested in Downtown Condos"
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: "block", color: "#cbd5e1", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Budget</label>
+                              <input
+                                type="text"
+                                value={profileBudget}
+                                onChange={(e) => setProfileBudget(e.target.value)}
+                                style={{
+                                  width: "100%",
+                                  padding: "0.5rem 0.65rem",
+                                  borderRadius: "0.55rem",
+                                  border: "1px solid #374151",
+                                  background: "rgba(15,23,42,0.9)",
+                                  color: "#f9fafb",
+                                }}
+                                placeholder="$500k – $650k"
+                              />
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "0.75rem" }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setProfileSource(selectedLead.source || "");
+                                setProfileTargetArea(selectedLead.target_area || "");
+                                setProfileBudget(selectedLead.budget || "");
+                              }}
+                              style={{
+                                padding: "0.45rem 0.7rem",
+                                borderRadius: "0.55rem",
+                                border: "1px solid #374151",
+                                background: "transparent",
+                                color: "#9ca3af",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Reset
+                            </button>
+                            <button
+                              type="button"
+                              disabled={profileSaving}
+                              onClick={handleSaveProfile}
+                              style={{
+                                padding: "0.45rem 0.95rem",
+                                borderRadius: "0.55rem",
+                                border: "1px solid #2563eb",
+                                background: profileSaving ? "rgba(37,99,235,0.4)" : "rgba(37,99,235,0.9)",
+                                color: "#fff",
+                                cursor: profileSaving ? "default" : "pointer",
+                              }}
+                            >
+                              {profileSaving ? "Saving..." : "Save Profile"}
+                            </button>
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            border: "1px solid #1f2937",
+                            borderRadius: "0.75rem",
+                            padding: "0.85rem",
+                            background: "rgba(15,23,42,0.5)",
+                          }}
+                        >
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.6rem" }}>
+                            <div>
+                              <div style={{ color: "#9ca3af", fontSize: "0.85rem" }}>Created</div>
+                              <div style={{ color: "#e5e7eb" }}>
+                                {selectedLead.created_at ? formatShortDateTime(selectedLead.created_at) : "—"}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ color: "#9ca3af", fontSize: "0.85rem" }}>Status</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#e5e7eb" }}>
+                                <StatusPill status={selectedLead.status} />
+                                <span>{selectedLead.nurture_status || "Nurture"}</span>
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ color: "#9ca3af", fontSize: "0.85rem" }}>Next nurture</div>
+                              <div style={{ color: "#e5e7eb" }}>
+                                {selectedLead.next_nurture_at ? formatShortDateTime(selectedLead.next_nurture_at) : "—"}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ color: '#9ca3af' }}>Select a lead to view profile.</div>
                     )}
                   </div>
                 )}
@@ -2264,6 +2568,142 @@ export default function Home() {
                   Pause Automation
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Task / reminder modal */}
+        {taskModalOpen && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 320,
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              style={{
+                width: "min(540px, 94%)",
+                backgroundColor: "#071023",
+                padding: "1rem",
+                borderRadius: "0.75rem",
+                border: "1px solid #374151",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.6)",
+              }}
+            >
+              <h3 style={{ margin: 0, marginBottom: "0.5rem" }}>Add Task / Reminder</h3>
+              {!selectedLead ? (
+                <p style={{ color: "#cbd5e1" }}>Select a lead first to create a task.</p>
+              ) : (
+                <>
+                  <div style={{ marginBottom: "0.75rem" }}>
+                    <label style={{ display: "block", color: "#cbd5e1", marginBottom: "0.25rem" }}>Task description</label>
+                    <textarea
+                      value={taskDescription}
+                      onChange={(e) => setTaskDescription(e.target.value)}
+                      rows={3}
+                      style={{
+                        width: "100%",
+                        padding: "0.55rem 0.65rem",
+                        borderRadius: "0.55rem",
+                        border: "1px solid #374151",
+                        background: "rgba(15,23,42,0.9)",
+                        color: "#f9fafb",
+                        resize: "vertical",
+                      }}
+                      placeholder="Follow up with financing next Tuesday"
+                    />
+                  </div>
+                  <div style={{ marginBottom: "0.75rem" }}>
+                    <label style={{ display: "block", color: "#cbd5e1", marginBottom: "0.25rem" }}>Due date / time</label>
+                    <input
+                      type="datetime-local"
+                      value={taskDueAt}
+                      onChange={(e) => setTaskDueAt(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "0.55rem 0.65rem",
+                        borderRadius: "0.55rem",
+                        border: "1px solid #374151",
+                        background: "rgba(15,23,42,0.9)",
+                        color: "#f9fafb",
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
+                    <button
+                      type="button"
+                      onClick={() => setTaskModalOpen(false)}
+                      style={{
+                        padding: "0.45rem 0.7rem",
+                        borderRadius: "0.55rem",
+                        border: "1px solid #374151",
+                        background: "transparent",
+                        color: "#9ca3af",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={taskSaving || !taskDescription.trim() || !selectedLead}
+                      onClick={async () => {
+                        if (!selectedLead || !taskDescription.trim()) return;
+                        setTaskSaving(true);
+                        setMessage(null);
+                        try {
+                          const res = await fetch("/api/tasks", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              leadId: selectedLead.id,
+                              description: taskDescription.trim(),
+                              dueAt: taskDueAt || null,
+                            }),
+                          });
+                          const json = await res.json().catch(() => ({} as Record<string, unknown>));
+                          if (!res.ok) {
+                            const apiError =
+                              json && typeof json === "object" && "error" in json && typeof (json as Record<string, unknown>)["error"] === "string"
+                                ? ((json as Record<string, unknown>)["error"] as string)
+                                : undefined;
+                            setMessage(apiError || `Error saving task (status ${res.status})`);
+                            return;
+                          }
+                          setMessage("Task added.");
+                          setTaskModalOpen(false);
+                          setTaskDescription("");
+                          setTaskDueAt("");
+                        } catch (err: unknown) {
+                          console.error("Error saving task:", err);
+                          const msg = err instanceof Error ? err.message : String(err);
+                          setMessage(msg || "Error saving task");
+                        } finally {
+                          setTaskSaving(false);
+                        }
+                      }}
+                      style={{
+                        padding: "0.45rem 0.95rem",
+                        borderRadius: "0.55rem",
+                        border: "1px solid #2563eb",
+                        background: taskSaving ? "rgba(37,99,235,0.4)" : "rgba(37,99,235,0.9)",
+                        color: "#fff",
+                        cursor: taskSaving || !taskDescription.trim() ? "default" : "pointer",
+                        opacity: taskSaving || !taskDescription.trim() ? 0.7 : 1,
+                      }}
+                    >
+                      {taskSaving ? "Saving..." : "Save Task"}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
