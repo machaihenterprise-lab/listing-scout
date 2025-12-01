@@ -2,12 +2,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-// Use Service Role here so we can set agent_id safely server-side
-const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-
 /**
  * Expected body:
  * {
@@ -26,6 +20,18 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      return NextResponse.json({ error: "Supabase configuration missing" }, { status: 500 });
+    }
+
+    // Use Service Role here so we can set agent_id safely server-side
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { persistSession: false },
+    });
 
     // 1. Get current user (agent)
     const authHeader = req.headers.get("Authorization");
@@ -100,10 +106,10 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ task }, { status: 201 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Unhandled error in /api/tasks:", err);
     return NextResponse.json(
-      { error: "Unexpected error", details: err?.message },
+      { error: "Unexpected error", details: err instanceof Error ? err.message : String(err) },
       { status: 500 }
     );
   }
