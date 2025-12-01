@@ -2,7 +2,7 @@ import React from "react";
 import { cookies } from "next/headers";
 import LoginForm from "./LoginForm";
 import Actions from "./Actions";
-import { DashboardDailyTasks } from "./DashboardDailyTasks";
+import { DashboardDailyTasks } from "../../DashboardDaily/Tasks";
 
 type DeliveryError = {
   id: string;
