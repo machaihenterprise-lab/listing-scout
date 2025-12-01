@@ -247,6 +247,7 @@ export default function Home() {
   const SCROLL_THRESHOLD_PX = 150; // distance from bottom to consider "near bottom"
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const [autoScrollAlways, setAutoScrollAlways] = useState(false);
+  const [shouldAutoselectLead, setShouldAutoselectLead] = useState(true); // prevents re-auto-select after mobile back
 
   const scrollToBottom = useCallback((force = false) => {
     const el = messagesEndRef.current;
@@ -336,7 +337,7 @@ export default function Home() {
 
       // Auto-select a lead if none selected yet. Prefer a lead matching the
       // current `leadFilter` so newly-created leads are immediately visible.
-      if (!selectedLead && mappedLeads.length > 0) {
+      if (!selectedLead && shouldAutoselectLead && mappedLeads.length > 0) {
         const preferred =
           mappedLeads.find((l) => (leadFilter === 'ALL' ? true : l.status === leadFilter)) || mappedLeads[0];
         setSelectedLead(preferred);
@@ -349,7 +350,7 @@ export default function Home() {
     } finally {
       setLoadingLeads(false);
     }
-  }, [selectedLead, leadFilter]);
+  }, [selectedLead, leadFilter, shouldAutoselectLead]);
 
   const fetchMessages = useCallback(
   async (leadId: string) => {
@@ -468,6 +469,7 @@ export default function Home() {
   /* ------------------------------------------------------------------ */
 
   const handleSelectLead = async (lead: Lead) => {
+    setShouldAutoselectLead(true);
     setSelectedLead(lead);
     setMessage(null);
     // messages + polling are handled by the effect below; this call
@@ -1444,7 +1446,10 @@ export default function Home() {
             {isMobile && selectedLead ? (
               <button
                 type="button"
-                onClick={() => setSelectedLead(null)}
+                onClick={() => {
+                  setSelectedLead(null);
+                  setShouldAutoselectLead(false); // keep user on list until they pick again
+                }}
                 className="ls-mobile-back"
                 style={{
                   alignSelf: 'flex-start',
