@@ -8,6 +8,44 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "leadId is required" }, { status: 400 });
     }
 
+    // --- NEW BLOCK: Handle message creation (SMS or NOTE) ---
+   if (body?.message_type) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    const insertPayload = {
+    lead_id: leadId,
+    body: body.body,
+    message_type: body.message_type === "NOTE" ? "NOTE" : body.message_type,
+    is_private: body.message_type === "NOTE" ? true : (body.is_private ?? false),
+    sender_type: body.message_type === "NOTE" ? "agent" : (body.sender_type ?? "agent"),
+  };
+
+    const insertRes = await fetch(`${supabaseUrl}/rest/v1/messages`, {
+    method: "POST",
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify(insertPayload)
+  });
+
+  if (!insertRes.ok) {
+    const text = await insertRes.text().catch(() => "");
+    return NextResponse.json(
+      { error: "Insert failed", detail: text },
+      { status: 500 }
+    );
+  }
+
+  const data = await insertRes.json();
+  return NextResponse.json({ message: data }, { status: 200 });
+}
+// --- END NEW BLOCK ---
+
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
