@@ -243,6 +243,11 @@ export default function Home() {
     };
   }, []);
 
+  // On mobile, keep the lead list as the first view; re-enable auto-select on desktop.
+  useEffect(() => {
+    setShouldAutoselectLead(!isMobile);
+  }, [isMobile]);
+
   // Scroll behavior controls
   const SCROLL_THRESHOLD_PX = 150; // distance from bottom to consider "near bottom"
   const [isScrolledUp, setIsScrolledUp] = useState(false);
@@ -1431,7 +1436,7 @@ export default function Home() {
           </div>
 
             {/* RIGHT COLUMN – Conversation (mobile: shown first) */}
-            {rightTab === "conversation" && (
+            {rightTab === "conversation" && (!isMobile || selectedLead) && (
               <aside
                 className="ls-conversation-panel h-full flex w-full flex-col md:order-2 order-1"
                 style={{
