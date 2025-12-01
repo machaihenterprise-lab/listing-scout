@@ -1305,7 +1305,6 @@ export default function Home() {
                 </ul>
               )}
             </section>
-          </div>
             <div
               style={{
                 display: "flex",
@@ -1897,8 +1896,8 @@ export default function Home() {
 
             {/* Test SMS button removed */}
           </aside>
-          )}
-        </div>
+        )}
+      </div>
         {/* Add Lead modal */}
         {addModalOpen && (
           <div
@@ -2125,5 +2124,3 @@ export default function Home() {
     </>
   );
 }
-
-
