@@ -1286,7 +1286,124 @@ export default function Home() {
               {loadingLeads ? (
                 <p>Loading leads...</p>
               ) : filteredLeads.length === 0 ? (
-                <p style={{ color: "#9ca3af" }}>No leads match your filters.</p>
+                <div
+                  style={{
+                    background: "rgba(30,41,59,0.6)",
+                    border: "1px solid #1f2937",
+                    borderRadius: "1rem",
+                    padding: "1.25rem",
+                    color: "#e5e7eb",
+                    textAlign: "center",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.9rem",
+                    minHeight: "320px",
+                    justifyContent: "center",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: "2rem", marginBottom: "0.35rem" }}>📥</div>
+                    <div style={{ fontSize: "1.15rem", fontWeight: 700 }}>
+                      Welcome to Listing Scout! Ready to fill your pipeline?
+                    </div>
+                    <div style={{ color: "#94a3b8", marginTop: "0.25rem" }}>
+                      Let&apos;s add your first lead and let the nurture bot do the rest.
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                      gap: "0.75rem",
+                      textAlign: "left",
+                    }}
+                  >
+                    {[
+                      {
+                        title: "Add Your First Lead",
+                        body: "Use the Add Lead form below or the Quick Add button to enter your first contact.",
+                        number: "1",
+                      },
+                      {
+                        title: "Watch the Bot Work",
+                        body: "The system will place every new lead into the Nurture workflow automatically.",
+                        number: "2",
+                      },
+                      {
+                        title: "Get Notified Instantly",
+                        body: "We’ll alert you the moment a lead replies or becomes ready for a follow-up call.",
+                        number: "3",
+                      },
+                      {
+                        title: "Connect Your Lead Source",
+                        body: "Link your website form or CRM to send leads automatically and let the bot begin immediately.",
+                        number: "4",
+                        actionLabel: "Connect Integration",
+                        actionHref: "/integrations",
+                      },
+                    ].map((step) => (
+                      <div
+                        key={step.number}
+                        style={{
+                          border: "1px solid #273349",
+                          borderRadius: "0.9rem",
+                          padding: "0.75rem",
+                          background: "rgba(15,23,42,0.5)",
+                          display: "flex",
+                          gap: "0.75rem",
+                          alignItems: "flex-start",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: "34px",
+                            height: "34px",
+                            borderRadius: "10px",
+                            background: "rgba(59,130,246,0.15)",
+                            color: "#bfdbfe",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: 700,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {step.number}
+                        </div>
+                          <div>
+                            <div style={{ fontWeight: 700, marginBottom: "0.2rem" }}>{step.title}</div>
+                            <div style={{ color: "#94a3b8", fontSize: "0.9rem" }}>{step.body}</div>
+                            {step.actionLabel ? (
+                              <div style={{ marginTop: "0.45rem" }}>
+                                <a
+                                  href={step.actionHref}
+                                  style={{
+                                    display: "inline-block",
+                                    padding: "0.45rem 0.9rem",
+                                    borderRadius: "0.55rem",
+                                    border: "1px solid #2563eb",
+                                    background: "rgba(37,99,235,0.12)",
+                                    color: "#bfdbfe",
+                                    fontSize: "0.9rem",
+                                    textDecoration: "none",
+                                  }}
+                                >
+                                  {step.actionLabel}
+                                </a>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", alignItems: "center" }}>
+                    <div style={{ color: "#94a3b8", fontSize: "0.9rem" }}>
+                      Enter data manually below. • Or, click here to connect your lead source (CRM/Website).
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                   {filteredLeads.map((lead) => {
