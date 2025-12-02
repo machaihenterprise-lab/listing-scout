@@ -170,10 +170,6 @@ function Header() {
         </Link>
       </nav>
 
-      {/* Mobile Menu Icon (can wire later) */}
-      <div className="lg:hidden">
-        <span style={{ fontSize: "1.5rem" }}>☰</span>
-      </div>
     </header>
   );
 }
@@ -229,10 +225,10 @@ function formatShortDateTime(dateString: string | null | undefined) {
   return `${datePart} at ${timePart}`;
 }
 
-function formatRelativeTime(dateString: string | null | undefined) {
+function formatRelativeTime(dateString: string | null | undefined, nowMs?: number) {
   if (!dateString) return "";
   const date = new Date(dateString);
-  const now = Date.now();
+  const now = nowMs ?? Date.now();
   const diffMs = now - date.getTime();
   if (Number.isNaN(diffMs) || diffMs < 0) return "";
 
@@ -245,6 +241,32 @@ function formatRelativeTime(dateString: string | null | undefined) {
   if (minutes < 60) return `${minutes}m ago`;
   if (hours < 24) return `${hours}h ago`;
   return `${days}d ago`;
+}
+
+function formatDateHeading(dateString: string | null | undefined) {
+  if (!dateString) return "";
+  const d = new Date(dateString);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  const isToday =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+  const isYesterday =
+    d.getFullYear() === yesterday.getFullYear() &&
+    d.getMonth() === yesterday.getMonth() &&
+    d.getDate() === yesterday.getDate();
+
+  if (isToday) return "Today";
+  if (isYesterday) return "Yesterday";
+
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 
@@ -267,6 +289,8 @@ export default function Home() {
   const [activitySummary, setActivitySummary] = useState<ActivitySummary | null>(null);
   const [activityLoading, setActivityLoading] = useState(true);
   const [activityError, setActivityError] = useState<string | null>(null);
+  // Tick for live relative time updates
+  const [nowTick, setNowTick] = useState(Date.now());
   // Snooze state – dashboard-level
   const [snoozedUntil, setSnoozedUntil] = useState<string | null>(null);
 
@@ -283,7 +307,7 @@ export default function Home() {
 
   // Left column UI: search, filter, modal
   const [searchTerm, setSearchTerm] = useState("");
-  const [leadFilter, setLeadFilter] = useState<"HOT" | "NURTURE" | "ALL">("NURTURE");
+  const [leadFilter, setLeadFilter] = useState<"HOT" | "NURTURE" | "ALL" | "UNREAD">("NURTURE");
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const quickAddNameRef = useRef<HTMLInputElement | null>(null);
@@ -346,31 +370,6 @@ export default function Home() {
   const isSnoozed =
     snoozedUntil != null && new Date(snoozedUntil).getTime() > Date.now();
 
-  // Toggle snooze (24 hours from now for now)
-  function handleSnoozeClick() {
-    if (isSnoozed) {
-      // Unsnooze
-      try {
-        window.localStorage.removeItem("ls_snoozed_until");
-      } catch (err) {
-        console.error("Error clearing snooze:", err);
-      }
-      setSnoozedUntil(null);
-      return;
-    }
-
-    const now = new Date();
-    const until = new Date(now.getTime() + 24 * 60 * 60 * 1000); // +24h
-
-    const iso = until.toISOString();
-    try {
-      window.localStorage.setItem("ls_snoozed_until", iso);
-    } catch (err) {
-      console.error("Error saving snooze:", err);
-    }
-    setSnoozedUntil(iso);
-  }
-
   // Mobile master/detail control: when a lead is selected we treat that
   // as the "detail" view on small screens.
   const isDetailViewOpen = !!selectedLead;
@@ -400,6 +399,14 @@ export default function Home() {
     setShouldAutoselectLead(!isMobile);
   }, [isMobile]);
 
+  // Live-update relative timestamps every 60s
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setNowTick(Date.now());
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
   // Scroll behavior controls
   const SCROLL_THRESHOLD_PX = 150; // distance from bottom to consider "near bottom"
   const [isScrolledUp, setIsScrolledUp] = useState(false);
@@ -412,6 +419,7 @@ export default function Home() {
   const [taskDueAt, setTaskDueAt] = useState("");
   const [taskSaving, setTaskSaving] = useState(false);
   // Profile tab state (editable)
+  const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const scrollToBottom = useCallback((force = false) => {
     const el = messagesEndRef.current;
@@ -524,7 +532,7 @@ export default function Home() {
         return;
       }
 
-      const mappedLeads: Lead[] = (data as Array<Record<string, unknown>>).map((row) => {
+      let mappedLeads: Lead[] = (data as Array<Record<string, unknown>>).map((row) => {
         const r = row as Partial<Lead>;
         return {
           id: (r.id as string) || "",
@@ -553,6 +561,32 @@ export default function Home() {
           move_timeline: (r as Record<string, unknown>)['move_timeline'] as string ?? null,
         } as Lead;
       });
+
+      // Auto-resume any snoozed leads whose lock has expired
+      const expiredSnoozedIds = mappedLeads
+        .filter(
+          (l) =>
+            l.nurture_status === "SNOOZED" &&
+            l.nurture_locked_until &&
+            new Date(l.nurture_locked_until).getTime() <= Date.now()
+        )
+        .map((l) => l.id);
+      if (expiredSnoozedIds.length > 0) {
+        try {
+          await supabase!
+            .from("leads")
+            .update({ nurture_locked_until: null, nurture_status: "ACTIVE" })
+            .in("id", expiredSnoozedIds);
+          // reflect in local copy
+          mappedLeads = mappedLeads.map((l) =>
+            expiredSnoozedIds.includes(l.id)
+              ? { ...l, nurture_status: "ACTIVE", nurture_locked_until: null }
+              : l
+          );
+        } catch (resumeErr) {
+          console.error("Error auto-resuming snoozed leads:", resumeErr);
+        }
+      }
 
       setLeads(mappedLeads);
     } catch (err: unknown) {
@@ -746,12 +780,12 @@ export default function Home() {
 
   // Toggle complete on a task
   const toggleTaskCompleted = useCallback(
-    async (taskId: string, nextValue: boolean) => {
+    async (task: Task, nextValue: boolean) => {
       try {
         const res = await fetch("/tasks/complete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ task_id: taskId, is_completed: nextValue }),
+          body: JSON.stringify({ task_id: task.id, is_completed: nextValue }),
         });
 
         const body = await res.json().catch(() => ({}));
@@ -760,14 +794,34 @@ export default function Home() {
         }
 
         setLeadTasks((prev) =>
-          prev.map((t) => (t.id === taskId ? { ...t, is_completed: nextValue } : t))
+          prev.map((t) => (t.id === task.id ? { ...t, is_completed: nextValue } : t))
         );
-        setDailyTasks((prev) => prev.filter((t) => (nextValue ? t.id !== taskId : true)));
+        setDailyTasks((prev) => prev.filter((t) => (nextValue ? t.id !== task.id : true)));
+
+        // If completing and this task belongs to the selected lead, log a system entry in the conversation timeline.
+        if (nextValue && selectedLead && task.lead_id === selectedLead.id) {
+          const nowIso = new Date().toISOString();
+          const bodyText = `Task “${task.title}” marked as complete (${formatShortDateTime(nowIso)})`;
+          setConversation((prev) => [
+            ...prev,
+            {
+              id: `task-complete-${task.id}-${nowIso}`,
+              lead_id: selectedLead.id,
+              direction: "OUTBOUND",
+              channel: "task",
+              body: bodyText,
+              created_at: nowIso,
+              message_type: "SYSTEM",
+              sender_type: "system",
+              is_private: true,
+            } as MessageRow,
+          ]);
+        }
       } catch (err) {
         console.error("Error toggling task:", err);
       }
     },
-    [setLeadTasks, setDailyTasks]
+    [setLeadTasks, setDailyTasks, selectedLead]
   );
 
   // Snooze handlers
@@ -790,9 +844,10 @@ export default function Home() {
       }
 
       setMessage("Lead snoozed.");
-      // Refresh leads and clear selection (lead disappears)
+      setAutomationPaused(true);
+      // Refresh leads and keep selection visible
       await fetchLeads();
-      setSelectedLead(null);
+      setSelectedLead((prev) => (prev ? { ...prev, nurture_status: "SNOOZED", nurture_locked_until: iso } : prev));
       // Setup undo payload + toast
       setUndoPayload({ leadId: selectedLead.id, prevStatus });
       // animate toast in
@@ -960,6 +1015,16 @@ export default function Home() {
           return match;
       }
     });
+  };
+
+  // Auto-size reply textarea as user types
+  const handleReplyChange = (value: string) => {
+    setReplyText(value);
+    const ta = replyInputRef.current;
+    if (ta) {
+      ta.style.height = "auto";
+      ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+    }
   };
 
   // Perform the automation toggle (updates DB + UI)
@@ -1150,7 +1215,8 @@ export default function Home() {
   useEffect(() => {
     if (!selectedLead?.id) return;
     // Derive paused state from lead.nurture_status so UI reflects DB
-    setAutomationPaused((selectedLead.nurture_status || "").toUpperCase() === "PAUSED");
+    const status = (selectedLead.nurture_status || "").toUpperCase();
+    setAutomationPaused(status === "PAUSED" || status === "SNOOZED");
   }, [selectedLead?.id, selectedLead?.nurture_status]);
 
   // When a lead is selected:
@@ -1265,6 +1331,7 @@ export default function Home() {
   }, [quickAddOpen, addModalOpen]);
 
   // Lead filtering + search for the left column
+  const unreadCount = leads.filter((l) => l.has_unread_messages).length;
   const filteredLeads = leads
     .filter((l) => {
       // Exclude actively snoozed leads (nurture_locked_until in future)
@@ -1276,6 +1343,7 @@ export default function Home() {
       // Filter by tab
       if (leadFilter === "HOT" && l.status !== "HOT") return false;
       if (leadFilter === "NURTURE" && l.status !== "NURTURE") return false;
+      if (leadFilter === "UNREAD" && !l.has_unread_messages) return false;
 
       // Search by name / phone / email
       if (!searchTerm) return true;
@@ -1305,6 +1373,27 @@ export default function Home() {
   const displayedConversation = selectedLead
     ? conversation.filter((m) => m.lead_id === selectedLead.id)
     : [];
+  const groupedConversation = displayedConversation.reduce<
+    Array<{ key: string; label: string; items: MessageRow[] }>
+  >((acc, msg) => {
+    const key = new Date(msg.created_at).toDateString();
+    const label = formatDateHeading(msg.created_at);
+    const last = acc[acc.length - 1];
+    if (last && last.key === key) {
+      last.items.push(msg);
+    } else {
+      acc.push({ key, label, items: [msg] });
+    }
+    return acc;
+  }, []);
+  const isLeadSnoozed =
+    !!selectedLead &&
+    (selectedLead.nurture_status || "").toUpperCase() === "SNOOZED" &&
+    selectedLead.nurture_locked_until &&
+    new Date(selectedLead.nurture_locked_until).getTime() > Date.now();
+  const leadSnoozeLabel = selectedLead?.nurture_locked_until
+    ? formatShortDateTime(selectedLead.nurture_locked_until)
+    : "";
   const isNoteMessage = (msg: MessageRow) => {
     const type = (msg.message_type || "").toUpperCase();
     return type === "NOTE" || msg.is_private || msg.channel === "note";
@@ -1533,21 +1622,18 @@ export default function Home() {
               }}
             >
               <div style={{ fontWeight: 600, marginBottom: "0.5rem" }}>Snooze lead</div>
-              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-                <button type="button" onClick={() => handleSnoozePreset(1)} style={{ flex: 1, padding: "0.4rem", borderRadius: "0.4rem", background: "rgba(55,65,81,0.6)", color: "#fff", border: "1px solid #374151" }}>
-                  Tomorrow
+              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
+                <button type="button" onClick={() => handleSnoozePreset(1)} style={{ flex: 1, minWidth: "120px", padding: "0.4rem", borderRadius: "0.4rem", background: "rgba(55,65,81,0.6)", color: "#fff", border: "1px solid #374151" }}>
+                  Snooze 24 hours
                 </button>
-                <button type="button" onClick={() => handleSnoozePreset(3)} style={{ flex: 1, padding: "0.4rem", borderRadius: "0.4rem", background: "rgba(55,65,81,0.6)", color: "#fff", border: "1px solid #374151" }}>
-                  3 days
+                <button type="button" onClick={() => handleSnoozePreset(7)} style={{ flex: 1, minWidth: "120px", padding: "0.4rem", borderRadius: "0.4rem", background: "rgba(55,65,81,0.6)", color: "#fff", border: "1px solid #374151" }}>
+                  Snooze 7 days
                 </button>
               </div>
 
-              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-                <button type="button" onClick={() => handleSnoozePreset(7)} style={{ flex: 1, padding: "0.4rem", borderRadius: "0.4rem", background: "rgba(55,65,81,0.6)", color: "#fff", border: "1px solid #374151" }}>
-                  Next week
-                </button>
+              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem", alignItems: "center" }}>
                 <button type="button" onClick={() => { setSnoozeCustomDate(""); }} style={{ flex: 1, padding: "0.4rem", borderRadius: "0.4rem", background: "transparent", color: "#9ca3af", border: "1px solid #374151" }}>
-                  Custom
+                  Custom date
                 </button>
               </div>
 
@@ -1716,14 +1802,14 @@ export default function Home() {
                               marginBottom: "0.35rem",
                             }}
                           >
-                            <input
-                              type="checkbox"
-                              checked={!!task.is_completed}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => toggleTaskCompleted(task.id, e.target.checked)}
-                              title="Mark done"
-                              style={{ width: "18px", height: "18px", cursor: "pointer" }}
-                            />
+                              <input
+                                type="checkbox"
+                                checked={!!task.is_completed}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => toggleTaskCompleted(task, e.target.checked)}
+                                title="Mark done"
+                                style={{ width: "18px", height: "18px", cursor: "pointer" }}
+                              />
                             <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem", flex: 1 }}>
                               <span style={{ fontSize: "0.9rem" }}>{task.title}</span>
                               <span style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
@@ -1818,6 +1904,24 @@ export default function Home() {
                   }}
                 >
                   🌱 Nurture
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setLeadFilter("UNREAD")}
+                  style={{
+                    padding: "0.35rem 0.75rem",
+                    borderRadius: "999px",
+                    border: leadFilter === "UNREAD" ? "1px solid #3b82f6" : "1px solid #374151",
+                    backgroundColor: leadFilter === "UNREAD" ? "rgba(59,130,246,0.12)" : "transparent",
+                    color: leadFilter === "UNREAD" ? "#bfdbfe" : "#9ca3af",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                  }}
+                >
+                  📩 Unread ({unreadCount})
                 </button>
 
                 <button
@@ -1979,8 +2083,12 @@ export default function Home() {
                             : isHot
                               ? "1px solid rgba(248,113,113,0.6)"
                               : "1px solid #374151",
-                          borderLeft: isSelected ? "4px solid #f59e0b" : isHot ? "4px solid #ef4444" : undefined,
-                          boxShadow: isHot ? "0 10px 24px rgba(239,68,68,0.25)" : "none",
+                          borderLeft: isSelected ? "4px solid #f59e0b" : isHot ? "4px solid #ef4444" : hasUnread ? "3px solid #3b82f6" : undefined,
+                          boxShadow: isHot
+                            ? "0 10px 24px rgba(239,68,68,0.25)"
+                            : hasUnread
+                              ? "0 6px 18px rgba(59,130,246,0.2)"
+                              : "none",
                           transition: "background-color 140ms ease, border-left-color 140ms ease, box-shadow 140ms ease",
                         }}
                       >
@@ -1991,11 +2099,12 @@ export default function Home() {
                                 aria-hidden
                                 title="Unread messages"
                                 style={{
-                                  width: '8px',
-                                  height: '8px',
+                                  width: '9px',
+                                  height: '9px',
                                   borderRadius: '999px',
-                                  backgroundColor: '#ef4444', // red unread dot
+                                  backgroundColor: '#3b82f6', // blue unread dot
                                   display: 'inline-block',
+                                  boxShadow: '0 0 0 4px rgba(59,130,246,0.18)',
                                 }}
                               />
                             ) : null}
@@ -2003,19 +2112,6 @@ export default function Home() {
                             <strong style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
                               {isHot ? "🔥" : null}
                               {lead.name || "Unnamed lead"}
-                              {hasUnread ? (
-                                <span
-                                  style={{
-                                    minWidth: '12px',
-                                    height: '12px',
-                                    borderRadius: '999px',
-                                    backgroundColor: '#ef4444',
-                                    display: 'inline-block',
-                                    boxShadow: '0 0 0 4px rgba(239,68,68,0.18)',
-                                  }}
-                                  title="Unread messages"
-                                />
-                              ) : null}
                             </strong>
                           </div>
 
@@ -2033,7 +2129,7 @@ export default function Home() {
                           </div>
                             {lead.email && <div style={{ fontSize: "0.8rem", opacity: 0.8 }}>{lead.email}</div>}
                           <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.1rem' }}>
-                            {lastActivity ? `Last activity: ${formatRelativeTime(lastActivity)}` : "No activity yet"}
+                            {lastActivity ? `Last activity: ${formatRelativeTime(lastActivity, nowTick)}` : "No activity yet"}
                           </div>
                         </div>
 
@@ -2259,24 +2355,41 @@ export default function Home() {
                   })}
                   <button
                     type="button"
-                    onClick={handleSnoozeClick}
+                    ref={snoozeButtonRef}
+                    onClick={() => {
+                      if (!selectedLead) return;
+                      if (snoozeButtonRef.current) {
+                        const rect = snoozeButtonRef.current.getBoundingClientRect();
+                        const popWidth = 260;
+                        let left = rect.right - popWidth;
+                        if (rect.right + 16 > window.innerWidth) {
+                          left = rect.left;
+                        }
+                        left = Math.max(8, left + window.scrollX);
+                        const top = rect.bottom + 8 + window.scrollY;
+                        setSnoozePopoverPos({ left, top });
+                      }
+                      setSnoozeOpen((v) => !v);
+                    }}
                     style={{
                       marginLeft: "auto",
                       fontSize: "0.8rem",
                       padding: "0.45rem 0.95rem",
                       borderRadius: "999px",
                       border: "1px solid #374151",
-                      backgroundColor: isSnoozed ? "rgba(55,65,81,0.85)" : "rgba(59,130,246,0.95)",
-                      color: isSnoozed ? "#e5e7eb" : "#f9fafb",
-                      cursor: "pointer",
+                      backgroundColor: isLeadSnoozed ? "rgba(55,65,81,0.85)" : "rgba(59,130,246,0.95)",
+                      color: isLeadSnoozed ? "#e5e7eb" : "#f9fafb",
+                      cursor: selectedLead ? "pointer" : "not-allowed",
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "0.35rem",
+                      opacity: selectedLead ? 1 : 0.6,
                     }}
+                    disabled={!selectedLead}
                   >
-                    {isSnoozed ? (
+                    {isLeadSnoozed ? (
                       <>
-                        😴 Snoozed until {snoozedUntil ? formatShortDateTime(snoozedUntil) : ""}
+                        😴 Snoozed until {leadSnoozeLabel || "later"}
                       </>
                     ) : (
                       <>😴 Snooze</>
@@ -2298,7 +2411,7 @@ export default function Home() {
                 {rightTab === "conversation" && (
                   <>
                     <div
-                      className="ls-conversation-container"
+                      className="ls-conversation-container conversation-scroll"
                       style={{
                         position: 'relative',
                         flex: 1,
@@ -2309,6 +2422,7 @@ export default function Home() {
                         display: "flex",
                         flexDirection: "column",
                         gap: "0.75rem",
+                        paddingBottom: "3.5rem", // give space above sticky input
                       }}
                       ref={messagesEndRef}
                     >
@@ -2335,15 +2449,23 @@ export default function Home() {
                         >
                           {automationPaused ? '⏸ Automation Paused' : '🟢 Automation Active'}
                         </button>
+                        {isLeadSnoozed ? (
+                          <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', color: '#fbbf24', textAlign: 'right' }}>
+                            Workflow paused until {leadSnoozeLabel || "later"}
+                          </div>
+                        ) : null}
                       </div>
                       {displayedConversation.length === 0 ? (
                         <div
                           className="ls-conversation-card"
                           style={{
-                            padding: "1rem 0.5rem",
+                            padding: "0.5rem",
                             color: "#e5e7eb",
                             fontSize: "0.95rem",
                             lineHeight: 1.5,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "0.75rem",
                           }}
                         >
                           <div
@@ -2351,9 +2473,10 @@ export default function Home() {
                               background: "linear-gradient(135deg, #0f1a2e 0%, #0b1725 100%)",
                               border: "1px solid #1f2937",
                               borderRadius: "0.9rem",
-                              padding: "1rem",
+                              padding: "0.9rem",
                               textAlign: "center",
                               boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
+                              width: "100%",
                             }}
                           >
                             <div style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "0.35rem" }}>
@@ -2368,11 +2491,11 @@ export default function Home() {
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: "0.75rem",
-                                padding: "0.65rem 0.85rem",
+                                padding: "0.6rem 0.8rem",
                                 borderRadius: "0.8rem",
                                 background: "rgba(59,130,246,0.08)",
                                 border: "1px solid rgba(59,130,246,0.25)",
-                                marginBottom: "0.75rem",
+                                marginBottom: "0.65rem",
                               }}
                             >
                               <div
@@ -2415,11 +2538,11 @@ export default function Home() {
                               style={{
                                 display: "flex",
                                 flexDirection: "column",
-                                gap: "0.6rem",
-                                marginBottom: "0.75rem",
+                                gap: "0.55rem",
+                                marginBottom: "0.6rem",
                                 textAlign: "left",
                                 background: "rgba(17,24,39,0.6)",
-                                padding: "0.85rem",
+                                padding: "0.75rem",
                                 borderRadius: "0.75rem",
                                 border: "1px solid #1f2937",
                               }}
@@ -2545,96 +2668,146 @@ export default function Home() {
                       ) : (
                         // NON-EMPTY: show actual messages
                         <div style={{ padding: "0.25rem 0" }}>
-                          {(displayedConversation.length === 0) && (
-                            <div style={{ color: '#9ca3af', fontSize: '0.9rem', padding: '0.5rem 0' }}>
-                              No messages yet for this lead.
-                            </div>
-                          )}
-                          {displayedConversation.map((msg: MessageRow) => {
-                            const isNote = isNoteMessage(msg);
-                            if (!showNotesInline && isNote) return null;
-                            const isInbound = msg.direction === "INBOUND";
-
-                            return (
+                          {groupedConversation.map((group) => (
+                            <div key={group.key} style={{ marginBottom: "0.75rem" }}>
                               <div
-                                key={msg.id}
                                 style={{
-                                  marginBottom: "0.75rem",
-                                  textAlign: isInbound && !isNote ? "left" : "right",
+                                  textAlign: "center",
+                                  color: "#94a3b8",
+                                  fontSize: "0.8rem",
+                                  margin: "0.35rem 0",
                                 }}
                               >
-                                <div
-                                  style={{
-                                    fontSize: "0.75rem",
-                                    color: "#9ca3af",
-                                    marginBottom: "0.15rem",
-                                  }}
-                                >
-                                  {new Date(msg.created_at).toLocaleTimeString("en-US", {
-                                    hour: "numeric",
-                                    minute: "2-digit",
-                                  })}
-                                </div>
-
-                                <div
-                                  className="ls-message-bubble"
-                                  style={{
-                                    display: 'inline-block',
-                                    padding: '0.5rem 0.75rem',
-                                    borderRadius: '0.75rem',
-                                    maxWidth: '72%',
-                                    backgroundColor: isNote ? '#0f172a' : isInbound ? '#1f2937' : '#2563eb', // note: navy, lead: gray-800, agent: blue-600
-                                    color: '#fff',
-                                    fontSize: '0.9rem',
-                                    lineHeight: 1.25,
-                                    marginLeft: isInbound || isNote ? undefined : 'auto',
-                                    marginRight: isInbound || isNote ? 'auto' : undefined,
-                                    boxShadow: isNote ? '0 4px 10px rgba(0,0,0,0.35)' : isInbound ? 'none' : '0 6px 18px rgba(37,99,235,0.12)',
-                                    border: isNote ? '1px dashed rgba(148,163,184,0.45)' : '1px solid rgba(255,255,255,0.03)'
-                                  }}
-                                >
-                                  {isNote && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.25rem', fontSize: '0.78rem', color: '#cbd5e1' }}>
-                                      🔒 Private note
-                                      <span style={{ padding: '0.1rem 0.4rem', borderRadius: '999px', background: 'rgba(59,130,246,0.18)', color: '#bfdbfe', border: '1px solid rgba(59,130,246,0.3)' }}>
-                                        {msg.sender_type === 'agent' ? 'Agent' : 'System'}
-                                      </span>
-                                    </div>
-                                  )}
-                                  {msg.body}
-                                </div>
+                                {group.label}
                               </div>
-                            );
-                          })}
+                              {group.items.map((msg) => {
+                                const isNote = isNoteMessage(msg);
+                                if (!showNotesInline && isNote) return null;
+                                const isInbound = msg.direction === "INBOUND";
+                                const isSystem = (msg.message_type || "").toUpperCase() === "SYSTEM" || msg.channel === "task";
+                                const bubbleBg = isSystem
+                                  ? "rgba(59,130,246,0.08)"
+                                  : isNote
+                                    ? "#0f172a"
+                                    : isInbound
+                                      ? "#1f2937"
+                                      : "#2563eb";
+
+                                return (
+                                  <div
+                                    key={msg.id}
+                                    style={{
+                                      marginBottom: "0.65rem",
+                                      textAlign: isInbound && !isNote && !isSystem ? "left" : "right",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontSize: "0.75rem",
+                                        color: "#9ca3af",
+                                        marginBottom: "0.15rem",
+                                      }}
+                                    >
+                                      {new Date(msg.created_at).toLocaleTimeString("en-US", {
+                                        hour: "numeric",
+                                        minute: "2-digit",
+                                      })}
+                                    </div>
+
+                                    <div
+                                      className="ls-message-bubble"
+                                      style={{
+                                        display: 'inline-block',
+                                        padding: isSystem ? '0.45rem 0.65rem' : '0.5rem 0.75rem',
+                                        borderRadius: '0.75rem',
+                                        maxWidth: '72%',
+                                        backgroundColor: bubbleBg,
+                                        color: isSystem ? '#cbd5e1' : '#fff',
+                                        fontSize: '0.9rem',
+                                        lineHeight: 1.25,
+                                        marginLeft: isInbound || isNote || isSystem ? undefined : 'auto',
+                                        marginRight: isInbound || isNote || isSystem ? 'auto' : undefined,
+                                        boxShadow: isNote
+                                          ? '0 4px 10px rgba(0,0,0,0.35)'
+                                          : isInbound
+                                            ? 'none'
+                                            : isSystem
+                                              ? 'none'
+                                              : '0 6px 18px rgba(37,99,235,0.12)',
+                                        border: isNote
+                                          ? '1px dashed rgba(148,163,184,0.45)'
+                                          : isSystem
+                                            ? '1px solid rgba(59,130,246,0.2)'
+                                            : '1px solid rgba(255,255,255,0.03)'
+                                      }}
+                                    >
+                                      {isNote && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.25rem', fontSize: '0.78rem', color: '#cbd5e1' }}>
+                                          🔒 Private note
+                                          <span style={{ padding: '0.1rem 0.4rem', borderRadius: '999px', background: 'rgba(59,130,246,0.18)', color: '#bfdbfe', border: '1px solid rgba(59,130,246,0.3)' }}>
+                                            {msg.sender_type === 'agent' ? 'Agent' : 'System'}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {isSystem && (
+                                        <div style={{ fontSize: "0.8rem", marginBottom: "0.15rem", color: "#93c5fd" }}>
+                                          [ Task Event ]
+                                        </div>
+                                      )}
+                                      {msg.body}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
                     {/* --- END conversation block --- */}
 
                     {/* Reply form */}
-                    <div className="ls-reply-form" style={{ flexShrink: 0 }}>
+                    <div
+                      className="ls-reply-form"
+                      style={{
+                        flexShrink: 0,
+                        position: "sticky",
+                        bottom: 0,
+                        background: "rgba(7,12,22,0.9)",
+                        backdropFilter: "blur(8px)",
+                        borderRadius: "0.9rem",
+                        padding: "0.65rem",
+                        border: "1px solid #1f2937",
+                        boxShadow: "0 -6px 18px rgba(0,0,0,0.35)",
+                        marginTop: "0.75rem",
+                      }}
+                    >
                       <form
                         onSubmit={handleSendReply}
                         style={{
                           display: "flex",
                           gap: "0.5rem",
-                          alignItems: "center",
-                          marginTop: "0.5rem",
+                          alignItems: "flex-end",
                         }}
                       >
-                        <input
-                          type="text"
+                        <textarea
+                          ref={replyInputRef}
                           placeholder="Type a reply to this lead..."
                           value={replyText}
-                          onChange={(e) => setReplyText(e.target.value)}
+                          rows={1}
+                          onChange={(e) => handleReplyChange(e.target.value)}
                           style={{
                             flex: 1,
+                            minHeight: "44px",
+                            maxHeight: "160px",
                             padding: "0.6rem 0.75rem",
-                            borderRadius: "999px",
+                            borderRadius: "18px",
                             border: "1px solid #374151",
-                            backgroundColor: "rgba(15,23,42,0.9)",
+                            backgroundColor: "rgba(15,23,42,0.95)",
                             color: "#f9fafb",
-                            fontSize: "0.9rem",
+                            fontSize: "0.95rem",
+                            resize: "none",
+                            lineHeight: 1.35,
                           }}
                         />
                         <button
@@ -2643,12 +2816,12 @@ export default function Home() {
                             !selectedLead || sendingReply || !replyText.trim()
                           }
                           style={{
-                            padding: "0.55rem 1rem",
-                            borderRadius: "999px",
+                            padding: "0.45rem 0.85rem",
+                            borderRadius: "14px",
                             border: "1px solid #374151",
                             backgroundColor: sendingReply
                               ? "rgba(55,65,81,0.7)"
-                              : "rgba(59,130,246,0.9)",
+                              : "rgba(59,130,246,0.92)",
                             fontSize: "0.9rem",
                             opacity:
                               !selectedLead || sendingReply || !replyText.trim()
@@ -2921,7 +3094,7 @@ export default function Home() {
                                       type="checkbox"
                                       checked={!!task.is_completed}
                                       onChange={(e) =>
-                                        toggleTaskCompleted(task.id, e.target.checked)
+                                        toggleTaskCompleted(task, e.target.checked)
                                       }
                                     />
                                     <span

@@ -9,6 +9,9 @@ type LeadProfileProps = {
 
 type ProfileData = {
   id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
   source: string | null;
   target_areas: string | null;
   target_property_type: string | null;
@@ -35,14 +38,22 @@ export function LeadProfile({ leadId }: LeadProfileProps) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [source, setSource] = useState("");
   const [targetAreas, setTargetAreas] = useState("");
   const [propertyType, setPropertyType] = useState("");
   const [moveTimeline, setMoveTimeline] = useState("");
   const [budgetMin, setBudgetMin] = useState<string>("");
   const [budgetMax, setBudgetMax] = useState<string>("");
+  const [tags, setTags] = useState<string[]>([]);
+  const tagOptions = ["VIP", "Follow-up", "Not interested", "Bad number"];
 
   const applyDataToState = (d: ProfileData) => {
+    setName(d.name || "");
+    setPhone(d.phone || "");
+    setEmail(d.email || "");
     setSource(d.source || "");
     setTargetAreas(d.target_areas || "");
     setPropertyType(d.target_property_type || "");
@@ -71,6 +82,10 @@ export function LeadProfile({ leadId }: LeadProfileProps) {
           const casted = rows as ProfileData;
           setData(casted);
           applyDataToState(casted);
+          try {
+            const stored = window.localStorage.getItem(`lead_tags_${leadId}`);
+            if (stored) setTags(JSON.parse(stored));
+          } catch {}
         }
       } catch (e) {
         if (!abort) setError(e instanceof Error ? e.message : String(e));
@@ -92,6 +107,9 @@ export function LeadProfile({ leadId }: LeadProfileProps) {
         const { error: updError, data: updated } = await supabase!
           .from("leads")
           .update({
+          name: name || null,
+          phone: phone || null,
+          email: email || null,
           source: source || null,
           target_areas: targetAreas || null,
           target_property_type: propertyType || null,
@@ -111,10 +129,45 @@ export function LeadProfile({ leadId }: LeadProfileProps) {
       const casted = updated as ProfileData;
       setData(casted);
       applyDataToState(casted);
+      try {
+        window.localStorage.setItem(`lead_tags_${leadId}`, JSON.stringify(tags));
+      } catch {}
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleTag = (tag: string) => {
+    setTags((prev) => {
+      const next = prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag];
+      try {
+        window.localStorage.setItem(`lead_tags_${leadId}`, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleMarkBadNumber = async () => {
+    if (!leadId) return;
+    try {
+      await supabase!.from("leads").update({ status: "BAD_NUMBER" }).eq("id", leadId);
+      setError(null);
+      setData((prev) => (prev ? { ...prev, status: "BAD_NUMBER" } : prev));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleSnooze24h = async () => {
+    if (!leadId) return;
+    const until = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    try {
+      await supabase!.from("leads").update({ nurture_status: "SNOOZED", nurture_locked_until: until }).eq("id", leadId);
+      setData((prev) => (prev ? { ...prev, nurture_status: "SNOOZED", nurture_locked_until: until } : prev));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -171,9 +224,59 @@ export function LeadProfile({ leadId }: LeadProfileProps) {
         <h4 style={{ margin: 0, marginBottom: "0.5rem" }}>Lead Profile</h4>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem" }}>
           <div>
-            <label style={{ color: "#9ca3af", fontSize: "0.85rem", display: "block", marginBottom: "0.2rem" }}>Source</label>
+            <label style={{ color: "#9ca3af", fontSize: "0.85rem", display: "block", marginBottom: "0.2rem" }}>Name</label>
             <input
               type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "0.5rem 0.65rem",
+                borderRadius: "0.55rem",
+                border: "1px solid #374151",
+                background: "rgba(15,23,42,0.9)",
+                color: "#f9fafb",
+              }}
+              placeholder="Lead name"
+            />
+          </div>
+          <div>
+            <label style={{ color: "#9ca3af", fontSize: "0.85rem", display: "block", marginBottom: "0.2rem" }}>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "0.5rem 0.65rem",
+                borderRadius: "0.55rem",
+                border: "1px solid #374151",
+                background: "rgba(15,23,42,0.9)",
+                color: "#f9fafb",
+              }}
+              placeholder="email@example.com"
+            />
+          </div>
+          <div>
+            <label style={{ color: "#9ca3af", fontSize: "0.85rem", display: "block", marginBottom: "0.2rem" }}>Phone</label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "0.5rem 0.65rem",
+                borderRadius: "0.55rem",
+                border: "1px solid #374151",
+                background: "rgba(15,23,42,0.9)",
+                color: "#f9fafb",
+              }}
+              placeholder="(555) 123-4567"
+            />
+          </div>
+          <div>
+            <label style={{ color: "#9ca3af", fontSize: "0.85rem", display: "block", marginBottom: "0.2rem" }}>Source</label>
+            <select
               value={source}
               onChange={(e) => setSource(e.target.value)}
               style={{
@@ -184,8 +287,14 @@ export function LeadProfile({ leadId }: LeadProfileProps) {
                 background: "rgba(15,23,42,0.9)",
                 color: "#f9fafb",
               }}
-              placeholder="Website, Zillow, Manual"
-            />
+            >
+              <option value="">Select source</option>
+              <option value="manual">Manual</option>
+              <option value="website">Website</option>
+              <option value="import">Import</option>
+              <option value="zillow">Zillow</option>
+              <option value="referral">Referral</option>
+            </select>
           </div>
           <div>
             <label style={{ color: "#9ca3af", fontSize: "0.85rem", display: "block", marginBottom: "0.2rem" }}>Target Areas</label>
