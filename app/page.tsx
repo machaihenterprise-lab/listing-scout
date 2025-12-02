@@ -1858,14 +1858,16 @@ export default function Home() {
                     background: "rgba(30,41,59,0.6)",
                     border: "1px solid #1f2937",
                     borderRadius: "1rem",
-                    padding: "1.25rem",
+                    padding: "0.85rem",
                     color: "#e5e7eb",
                     textAlign: "center",
                     display: "flex",
                     flexDirection: "column",
-                    gap: "0.9rem",
-                    minHeight: "320px",
-                    justifyContent: "center",
+                    gap: "0.75rem",
+                    minHeight: "auto",
+                    justifyContent: "flex-start",
+                    maxHeight: "none",
+                    overflow: "visible",
                   }}
                 >
                   <div>
@@ -1878,14 +1880,14 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                      gap: "0.75rem",
-                      textAlign: "left",
-                    }}
-                  >
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                        gap: "0.55rem",
+                        textAlign: "left",
+                      }}
+                    >
                     {onboardingSteps.map((step) => (
                       <div
                         key={step.number}
