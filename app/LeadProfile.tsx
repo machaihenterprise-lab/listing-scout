@@ -41,10 +41,6 @@ export function LeadProfile({ leadId }: LeadProfileProps) {
   const [moveTimeline, setMoveTimeline] = useState("");
   const [budgetMin, setBudgetMin] = useState<string>("");
   const [budgetMax, setBudgetMax] = useState<string>("");
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskDueAt, setTaskDueAt] = useState("");
-  const [taskSaving, setTaskSaving] = useState(false);
-  const [taskError, setTaskError] = useState<string | null>(null);
 
   const applyDataToState = (d: ProfileData) => {
     setSource(d.source || "");
@@ -119,44 +115,6 @@ export function LeadProfile({ leadId }: LeadProfileProps) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleAddTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setTaskError(null);
-    if (!taskTitle.trim()) {
-      setTaskError("Task title is required.");
-      return;
-    }
-    setTaskSaving(true);
-    try {
-      const res = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leadId,
-          description: taskTitle.trim(),
-          dueAt: taskDueAt || null,
-        }),
-      });
-
-      const json = await res.json().catch(() => ({} as Record<string, unknown>));
-      if (!res.ok) {
-        const apiError =
-          json && typeof json === "object" && "error" in json && typeof (json as Record<string, unknown>)["error"] === "string"
-            ? ((json as Record<string, unknown>)["error"] as string)
-            : undefined;
-        setTaskError(apiError || `Failed to create task (status ${res.status}).`);
-        return;
-      }
-
-      setTaskTitle("");
-      setTaskDueAt("");
-    } catch (err) {
-      setTaskError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setTaskSaving(false);
     }
   };
 
@@ -347,70 +305,6 @@ export function LeadProfile({ leadId }: LeadProfileProps) {
             {saving ? "Saving..." : "Save Profile"}
           </button>
         </div>
-      </div>
-
-      <div
-        style={{
-          border: "1px solid #1f2937",
-          borderRadius: "0.75rem",
-          padding: "0.85rem",
-          background: "rgba(15,23,42,0.5)",
-        }}
-      >
-        <h4 style={{ margin: 0, marginBottom: "0.5rem" }}>Add Follow-Up Task</h4>
-        <form onSubmit={handleAddTask} style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-          <div>
-            <label style={{ color: "#9ca3af", fontSize: "0.85rem", display: "block", marginBottom: "0.2rem" }}>Task title</label>
-            <input
-              type="text"
-              value={taskTitle}
-              onChange={(e) => setTaskTitle(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "0.5rem 0.65rem",
-                borderRadius: "0.55rem",
-                border: "1px solid #374151",
-                background: "rgba(15,23,42,0.9)",
-                color: "#f9fafb",
-              }}
-              placeholder="Call about financing next Tuesday"
-              required
-            />
-          </div>
-          <div>
-            <label style={{ color: "#9ca3af", fontSize: "0.85rem", display: "block", marginBottom: "0.2rem" }}>Due date/time</label>
-            <input
-              type="datetime-local"
-              value={taskDueAt}
-              onChange={(e) => setTaskDueAt(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "0.5rem 0.65rem",
-                borderRadius: "0.55rem",
-                border: "1px solid #374151",
-                background: "rgba(15,23,42,0.9)",
-                color: "#f9fafb",
-              }}
-            />
-          </div>
-          {taskError && <div style={{ color: "#fb7185", fontSize: "0.9rem" }}>{taskError}</div>}
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button
-              type="submit"
-              disabled={taskSaving}
-              style={{
-                padding: "0.45rem 0.95rem",
-                borderRadius: "0.55rem",
-                border: "1px solid #2563eb",
-                background: taskSaving ? "rgba(37,99,235,0.4)" : "rgba(37,99,235,0.9)",
-                color: "#fff",
-                cursor: taskSaving ? "default" : "pointer",
-              }}
-            >
-              {taskSaving ? "Saving..." : "+ Add Follow-Up Task"}
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );

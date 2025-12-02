@@ -53,12 +53,14 @@ type MessageRow = {
 
 type Task = {
   id: string;
-  lead_id: string;
-  description?: string | null;
-  title?: string | null;
+  lead_id: string | null;
+  agent_id: string | null;
+  title: string;
+  notes: string | null;
   due_at: string | null;
-  status?: string | null;
-  is_completed?: boolean | null;
+  is_completed: boolean | null;
+  priority: string | null;
+  created_at: string;
 };
 
 /* ------------------------------------------------------------------ */
@@ -258,8 +260,23 @@ export default function Home() {
   const [activityUpdatedAt, setActivityUpdatedAt] = useState<string | null>(null);
   const hasActivity = !!activity && ((activity.nurtureTexts || 0) > 0 || (activity.newLeads || 0) > 0 || (activity.errors || 0) > 0);
 
-  // Right column tab state (conversation vs notes)
-  const [rightTab, setRightTab] = useState<'conversation' | 'notes' | 'profile'>('conversation');
+  // --- Tasks state ---
+  const [leadTasks, setLeadTasks] = useState<Task[]>([]);
+  const [dailyTasks, setDailyTasks] = useState<Task[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
+
+  // Right column tab state
+  const [rightTab, setRightTab] = useState<"conversation" | "tasks" | "profile" | "notes">(
+    "conversation"
+  );
+
+  // Add Task form (drawer / inline)
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskNotes, setNewTaskNotes] = useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState<"low" | "medium" | "high">("medium");
+  const [creatingTask, setCreatingTask] = useState(false);
 
   // Mobile master/detail control: when a lead is selected we treat that
   // as the "detail" view on small screens.
@@ -301,8 +318,6 @@ export default function Home() {
   const [taskDescription, setTaskDescription] = useState("");
   const [taskDueAt, setTaskDueAt] = useState("");
   const [taskSaving, setTaskSaving] = useState(false);
-  const [dailyTasks, setDailyTasks] = useState<Task[]>([]);
-  const [loadingTasks, setLoadingTasks] = useState(false);
   // Profile tab state (editable)
 
   const scrollToBottom = useCallback((force = false) => {
@@ -485,48 +500,131 @@ export default function Home() {
     []
   );
 
+  // Utility: end of today in local time
+  function getEndOfToday() {
+    const d = new Date();
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }
+
+  // Fetch daily action items (all tasks due today or overdue, not completed)
   const fetchDailyTasks = useCallback(async () => {
-    setLoadingTasks(true);
+    setTasksLoading(true);
     try {
-      const endOfToday = (() => {
-        const d = new Date();
-        d.setHours(23, 59, 59, 999);
-        return d;
-      })();
+      const res = await fetch(`/tasks/list`);
+      const body = await res.json().catch(() => ({}));
 
-      const { data, error } = await supabase!
-        .from("tasks")
-        .select("*")
-        .order("due_at", { ascending: true });
-
-      if (error) {
-        const msg = (error as { message?: string })?.message || "Unknown error";
-        setMessage((prev) => prev ?? `Error loading tasks: ${msg}`);
+      if (res.status === 404) {
+        setDailyTasks([]);
         return;
       }
 
-      const filtered = (data as Task[]).filter((t) => {
+      if (!res.ok) {
+        throw new Error(body.error || `Failed to load tasks (status ${res.status})`);
+      }
+      if (body && typeof body.ok !== "undefined" && !body.ok) {
+        throw new Error(body.error || "Failed to load tasks");
+      }
+
+      const allTasks: Task[] = body.tasks || [];
+      const endOfToday = getEndOfToday();
+
+      const dueTodayOrOverdue = allTasks.filter((t) => {
+        if (t.is_completed) return false;
         if (!t.due_at) return false;
         const due = new Date(t.due_at);
-        if (Number.isNaN(due.getTime())) return false;
-        // due today or overdue
-        return due.getTime() <= endOfToday.getTime();
+        return due <= endOfToday;
       });
 
-      // drop completed tasks
-      const openTasks = filtered.filter((t) => {
-        const status = (t.status || "").toUpperCase();
-        return !t.is_completed && status !== "DONE" && status !== "COMPLETED";
-      });
-
-      setDailyTasks(openTasks.slice(0, 10)); // keep list short
+      setDailyTasks(dueTodayOrOverdue);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setMessage((prev) => prev ?? `Error loading tasks: ${msg}`);
+      console.error("Error loading daily tasks:", err);
     } finally {
-      setLoadingTasks(false);
+      setTasksLoading(false);
     }
-  }, []);
+  }, [setDailyTasks]);
+
+  // Create a new task for the selected lead
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleCreateTask = useCallback(async () => {
+    if (!selectedLead) {
+      setTaskError("Select a lead before creating a task.");
+      return;
+    }
+
+    const trimmedTitle = newTaskTitle.trim();
+    if (!trimmedTitle) {
+      setTaskError("Task title is required.");
+      return;
+    }
+
+    try {
+      setCreatingTask(true);
+      setTaskError(null);
+
+      const due_at =
+        newTaskDueDate.trim() === ""
+          ? null
+          : new Date(`${newTaskDueDate}T17:00:00`).toISOString(); // 5pm local default
+
+      const res = await fetch("/tasks/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lead_id: selectedLead.id,
+          agent_id: null,
+          title: trimmedTitle,
+          due_at,
+          priority: newTaskPriority,
+        }),
+      });
+
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body.error) {
+        throw new Error(body.error || "Failed to create task");
+      }
+
+      const created: Task = body.task;
+      setLeadTasks((prev) => [created, ...prev]);
+      await fetchDailyTasks();
+      setNewTaskTitle("");
+      setNewTaskNotes("");
+      setNewTaskDueDate("");
+      setNewTaskPriority("medium");
+    } catch (err: unknown) {
+      console.error("Error creating task:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setTaskError(msg || "Error creating task");
+    } finally {
+      setCreatingTask(false);
+    }
+  }, [fetchDailyTasks, newTaskDueDate, newTaskNotes, newTaskPriority, newTaskTitle, selectedLead]);
+
+  // Toggle complete on a task
+  const toggleTaskCompleted = useCallback(
+    async (taskId: string, nextValue: boolean) => {
+      try {
+        const res = await fetch("/tasks/complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task_id: taskId, is_completed: nextValue }),
+        });
+
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || body.error) {
+          throw new Error(body.error || "Failed to update task");
+        }
+
+        setLeadTasks((prev) =>
+          prev.map((t) => (t.id === taskId ? { ...t, is_completed: nextValue } : t))
+        );
+        setDailyTasks((prev) => prev.filter((t) => (nextValue ? t.id !== taskId : true)));
+      } catch (err) {
+        console.error("Error toggling task:", err);
+      }
+    },
+    [setLeadTasks, setDailyTasks]
+  );
 
   // Snooze handlers
   const handleSnooze = async (targetDate: Date) => {
@@ -929,6 +1027,46 @@ export default function Home() {
       window.clearInterval(intervalId);
     };
   }, [selectedLead?.id, fetchMessages]);
+
+  // Whenever selected lead changes, load that lead's tasks
+  useEffect(() => {
+    if (selectedLead?.id) {
+      const loadLeadTasks = async () => {
+        try {
+          setTasksLoading(true);
+          setTaskError(null);
+
+          const res = await fetch(`/tasks/list?lead_id=${encodeURIComponent(selectedLead.id)}`);
+          const body = await res.json().catch(() => ({}));
+
+          if (res.status === 404) {
+            setLeadTasks([]);
+            return;
+          }
+
+          if (!res.ok) {
+            throw new Error(body.error || `Failed to load tasks (status ${res.status})`);
+          }
+          if (body && typeof body.ok !== "undefined" && !body.ok) {
+            throw new Error(body.error || "Failed to load tasks");
+          }
+
+          setLeadTasks(body.tasks || []);
+        } catch (err: unknown) {
+          console.error("Error loading lead tasks:", err);
+          const msg = err instanceof Error ? err.message : String(err);
+          setTaskError(msg || "Error loading tasks");
+        } finally {
+          setTasksLoading(false);
+        }
+      };
+
+      loadLeadTasks();
+    } else {
+      setLeadTasks([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLead?.id]);
 
   // Observe scroll position to know whether the user is scrolled up
   useEffect(() => {
@@ -1341,101 +1479,151 @@ export default function Home() {
             {/* Search + Tabs */}
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {/* Daily Action Items */}
-              <div
+              <section
                 style={{
-                  padding: "0.75rem",
-                  borderRadius: "0.75rem",
+                  padding: "1.5rem",
+                  borderRadius: "1rem",
                   border: "1px solid #1f2937",
-                  background: "rgba(15,23,42,0.65)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.4rem",
+                  marginBottom: "1rem",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <span style={{ fontWeight: 700 }}>Daily Action Items</span>
-                  <span style={{ fontSize: "0.85rem", color: "#9ca3af" }}>Due today or overdue</span>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: "0.5rem",
+                  }}
+                >
+                  <div>
+                    <h2 style={{ fontSize: "0.95rem", marginBottom: "0.1rem" }}>
+                      Daily Action Items
+                    </h2>
+                    <p
+                      style={{
+                        fontSize: "0.75rem",
+                        color: "#9ca3af",
+                      }}
+                    >
+                      Due today or overdue
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={fetchDailyTasks}
+                    style={{
+                      fontSize: "0.7rem",
+                      padding: "0.25rem 0.6rem",
+                      borderRadius: "999px",
+                      border: "1px solid #374151",
+                      backgroundColor: "rgba(15,23,42,0.9)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Refresh
+                  </button>
                 </div>
-                {loadingTasks ? (
-                  <div style={{ color: "#9ca3af", fontSize: "0.9rem" }}>Loading tasks…</div>
+
+                {tasksLoading ? (
+                  <p style={{ fontSize: "0.8rem", color: "#9ca3af", marginTop: "0.5rem" }}>
+                    Loading tasks…
+                  </p>
                 ) : dailyTasks.length === 0 ? (
-                  <div style={{ color: "#9ca3af", fontSize: "0.9rem" }}>No tasks due today.</div>
+                  <p style={{ fontSize: "0.8rem", color: "#9ca3af", marginTop: "0.5rem" }}>
+                    No tasks due today. You’re all caught up. 🎉
+                  </p>
                 ) : (
-                  <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                  <ul
+                    style={{
+                      listStyle: "none",
+                      padding: 0,
+                      margin: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.5rem",
+                    }}
+                  >
                     {dailyTasks.map((task) => {
-                      const lead = leads.find((l) => l.id === task.lead_id);
-                      const dueDate = task.due_at ? new Date(task.due_at) : null;
-                      const isOverdue = dueDate ? dueDate.getTime() < Date.now() : false;
+                      const dueLabel = task.due_at
+                        ? new Date(task.due_at).toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })
+                        : "No due date";
+
+                      const priorityColor =
+                        task.priority === "high"
+                          ? "#f97316"
+                          : task.priority === "low"
+                          ? "#9ca3af"
+                          : "#38bdf8";
+
                       return (
                         <li
                           key={task.id}
                           style={{
-                            border: isOverdue ? "1px solid rgba(248,113,113,0.6)" : "1px solid #273349",
-                            borderRadius: "0.65rem",
-                            padding: "0.55rem 0.65rem",
-                            background: isOverdue ? "rgba(248,113,113,0.08)" : "rgba(17,24,39,0.75)",
-                            display: "flex",
-                            gap: "0.6rem",
-                            alignItems: "center",
+                            borderRadius: "0.75rem",
+                            border: "1px solid #1f2937",
+                            padding: "0.6rem 0.75rem",
+                            backgroundColor: "rgba(15,23,42,0.9)",
                           }}
                         >
                           <div
-                            style={{ flex: 1, cursor: lead ? "pointer" : "default" }}
-                            onClick={() => {
-                              if (lead) {
-                                handleSelectLead(lead);
-                                setRightTab('conversation');
-                              }
-                            }}
-                          >
-                            <div style={{ fontWeight: 600, color: "#e5e7eb" }}>
-                              {(task.description || task.title || "Untitled task")}{" "}
-                              {lead ? `for ${lead.name || "Lead"}` : ""}
-                            </div>
-                            <div style={{ color: "#cbd5e1", fontSize: "0.85rem" }}>
-                              Due: {task.due_at ? formatShortDateTime(task.due_at) : "—"}
-                            </div>
-                          </div>
-                          <label
-                            title="Mark complete"
                             style={{
-                              display: "inline-flex",
+                              display: "flex",
+                              justifyContent: "space-between",
                               alignItems: "center",
-                              justifyContent: "center",
-                              width: "30px",
-                              height: "30px",
-                              borderRadius: "0.5rem",
-                              border: "1px solid rgba(148,163,184,0.4)",
-                              background: "rgba(15,23,42,0.9)",
-                              cursor: "pointer",
+                              marginBottom: "0.25rem",
                             }}
                           >
-                            <input
-                              type="checkbox"
-                              onChange={async () => {
-                                try {
-                                  const { error } = await supabase!
-                                    .from("tasks")
-                                    .update({ is_completed: true, status: "COMPLETED" })
-                                    .eq("id", task.id);
-                                  if (error) {
-                                    setMessage((prev) => prev ?? error.message);
-                                    return;
-                                  }
-                                  setDailyTasks((prev) => prev.filter((t) => t.id !== task.id));
-                                } catch (err) {
-                                  setMessage((prev) => prev ?? (err instanceof Error ? err.message : String(err)));
-                                }
+                            <span style={{ fontSize: "0.85rem" }}>{task.title}</span>
+                            <span
+                              style={{
+                                fontSize: "0.7rem",
+                                padding: "0.15rem 0.5rem",
+                                borderRadius: "999px",
+                                border: "1px solid rgba(148,163,184,0.5)",
+                                color: priorityColor,
                               }}
-                              style={{ width: "20px", height: "20px" }}
-                            />
-                          </label>
+                            >
+                              {task.priority ? task.priority.toUpperCase() : "MEDIUM"}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "#9ca3af",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
+                          >
+                            <span>Due {dueLabel}</span>
+                            <button
+                              type="button"
+                              onClick={() => toggleTaskCompleted(task.id, true)}
+                              style={{
+                                fontSize: "0.7rem",
+                                padding: "0.15rem 0.55rem",
+                                borderRadius: "999px",
+                                border: "1px solid #22c55e",
+                                backgroundColor: "rgba(22,163,74,0.1)",
+                                color: "#4ade80",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Mark done
+                            </button>
+                          </div>
                         </li>
                       );
                     })}
                   </ul>
                 )}
-              </div>
+              </section>
 
               <input
                 type="search"
@@ -1881,58 +2069,46 @@ export default function Home() {
                   </button>
                 ) : null}
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.75rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => setRightTab('conversation')}
-                    style={{
-                      padding: '0.35rem 0.75rem',
-                      borderRadius: '0.6rem',
-                      border: rightTab === 'conversation' ? '1px solid rgba(59,130,246,0.6)' : '1px solid #374151',
-                      background: rightTab === 'conversation' ? 'rgba(59,130,246,0.15)' : 'rgba(15,23,42,0.8)',
-                      color: '#e5e7eb',
-                      cursor: 'pointer',
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    💬 Conversation
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRightTab('notes')}
-                    style={{
-                      padding: '0.35rem 0.75rem',
-                      borderRadius: '0.6rem',
-                      border: rightTab === 'notes' ? '1px solid rgba(16,185,129,0.6)' : '1px solid #374151',
-                      background: rightTab === 'notes' ? 'rgba(16,185,129,0.15)' : 'rgba(15,23,42,0.8)',
-                      color: '#e5e7eb',
-                      cursor: 'pointer',
-                      fontSize: '0.9rem',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                    }}
-                    >
-                      🔒 Notes
-                      <span style={{ fontSize: '0.78rem', padding: '0.1rem 0.55rem', borderRadius: '999px', background: privateNotes.length > 0 ? 'rgba(16,185,129,0.25)' : 'rgba(148,163,184,0.18)', color: '#bbf7d0', border: '1px solid rgba(16,185,129,0.35)' }}>
-                        {privateNotes.length}
-                      </span>
-                    </button>
-                  <button
-                    type="button"
-                    onClick={() => setRightTab('profile')}
-                    style={{
-                      padding: '0.35rem 0.75rem',
-                      borderRadius: '0.6rem',
-                      border: rightTab === 'profile' ? '1px solid rgba(59,130,246,0.6)' : '1px solid #374151',
-                      background: rightTab === 'profile' ? 'rgba(59,130,246,0.15)' : 'rgba(15,23,42,0.8)',
-                      color: '#e5e7eb',
-                      cursor: 'pointer',
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    🗂 Profile
-                  </button>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.6rem",
+                    marginBottom: "0.9rem",
+                    fontSize: "0.9rem",
+                    padding: "0.35rem",
+                    borderRadius: "0.9rem",
+                    background: "rgba(15,23,42,0.8)",
+                    border: "1px solid #1f2937",
+                  }}
+                >
+                  {[
+                    { id: "conversation", label: "Conversation" },
+                    { id: "tasks", label: "Tasks" },
+                    { id: "profile", label: "Profile" },
+                    { id: "notes", label: "Notes" },
+                  ].map((tab) => {
+                    const active = rightTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setRightTab(tab.id as any)}
+                        style={{
+                          padding: "0.45rem 0.9rem",
+                          borderRadius: "0.75rem",
+                          border: active ? "1px solid rgba(59,130,246,0.8)" : "1px solid #273349",
+                          backgroundColor: active ? "linear-gradient(135deg, rgba(37,99,235,0.45), rgba(37,99,235,0.2))" : "rgba(7,11,20,0.85)",
+                          color: active ? "#e0ecff" : "#cbd5e1",
+                          cursor: "pointer",
+                          boxShadow: active ? "0 8px 20px rgba(37,99,235,0.25)" : "none",
+                          fontWeight: active ? 700 : 500,
+                          letterSpacing: "0.01em",
+                        }}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
                   <button
                     type="button"
                     onClick={() => {
@@ -1943,17 +2119,17 @@ export default function Home() {
                     }}
                     title="Add Task / Reminder"
                     style={{
-                      marginLeft: 'auto',
-                      padding: '0.35rem 0.7rem',
-                      borderRadius: '0.6rem',
-                      border: '1px solid #374151',
-                      background: 'rgba(37,99,235,0.15)',
-                      color: '#bfdbfe',
-                      cursor: 'pointer',
-                      fontSize: '0.9rem',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.35rem',
+                      marginLeft: "auto",
+                      padding: "0.35rem 0.7rem",
+                      borderRadius: "0.6rem",
+                      border: "1px solid #374151",
+                      background: "rgba(37,99,235,0.15)",
+                      color: "#bfdbfe",
+                      cursor: "pointer",
+                      fontSize: "0.9rem",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
                     }}
                   >
                     🕑 Add Task
@@ -1971,7 +2147,7 @@ export default function Home() {
                   </label>
                 </div>
 
-                {rightTab === "conversation" ? (
+                {rightTab === "conversation" && (
                   <>
                     <div
                       className="ls-conversation-container"
@@ -2385,7 +2561,259 @@ export default function Home() {
                     </div>
 
                   </>
-                ) : rightTab === "notes" ? (
+                )}
+
+                {rightTab === "tasks" && (
+                  <div
+                    style={{
+                      borderRadius: "0.75rem",
+                      border: "1px solid #1f2937",
+                      padding: "1rem",
+                      maxHeight: "460px",
+                      minHeight: "320px",
+                      overflowY: "auto",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "0.5rem",
+                      }}
+                    >
+                      <div>
+                        <h3 style={{ fontSize: "0.9rem" }}>Tasks for this lead</h3>
+                        <p style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+                          Create follow-ups and reminders tied to this conversation.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        borderRadius: "0.75rem",
+                        border: "1px solid #1f2937",
+                        padding: "0.7rem 0.75rem",
+                        marginBottom: "0.75rem",
+                        backgroundColor: "rgba(15,23,42,0.9)",
+                      }}
+                    >
+                      <div style={{ marginBottom: "0.4rem" }}>
+                        <input
+                          type="text"
+                          placeholder="Task title (e.g. Call about pricing)"
+                          value={newTaskTitle}
+                          onChange={(e) => setNewTaskTitle(e.target.value)}
+                          style={{
+                            width: "100%",
+                            padding: "0.5rem 0.6rem",
+                            borderRadius: "0.6rem",
+                            border: "1px solid #374151",
+                            backgroundColor: "rgba(15,23,42,0.95)",
+                            color: "#f9fafb",
+                            fontSize: "0.85rem",
+                          }}
+                        />
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "0.5rem",
+                          marginBottom: "0.4rem",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <input
+                          type="date"
+                          value={newTaskDueDate}
+                          onChange={(e) => setNewTaskDueDate(e.target.value)}
+                          style={{
+                            flex: "0 0 150px",
+                            padding: "0.4rem 0.5rem",
+                            borderRadius: "0.6rem",
+                            border: "1px solid #374151",
+                            backgroundColor: "rgba(15,23,42,0.95)",
+                            color: "#f9fafb",
+                            fontSize: "0.8rem",
+                          }}
+                        />
+
+                        <select
+                          value={newTaskPriority}
+                          onChange={(e) =>
+                            setNewTaskPriority(e.target.value as "low" | "medium" | "high")
+                          }
+                          style={{
+                            flex: "0 0 120px",
+                            padding: "0.4rem 0.5rem",
+                            borderRadius: "0.6rem",
+                            border: "1px solid #374151",
+                            backgroundColor: "rgba(15,23,42,0.95)",
+                            color: "#f9fafb",
+                            fontSize: "0.8rem",
+                          }}
+                        >
+                          <option value="low">Low priority</option>
+                          <option value="medium">Medium priority</option>
+                          <option value="high">High priority</option>
+                        </select>
+                      </div>
+
+                      <textarea
+                        placeholder="Notes (optional)"
+                        value={newTaskNotes}
+                        onChange={(e) => setNewTaskNotes(e.target.value)}
+                        rows={2}
+                        style={{
+                          width: "100%",
+                          padding: "0.5rem 0.6rem",
+                          borderRadius: "0.6rem",
+                          border: "1px solid #374151",
+                          backgroundColor: "rgba(15,23,42,0.95)",
+                          color: "#f9fafb",
+                          fontSize: "0.8rem",
+                          resize: "vertical",
+                          marginBottom: "0.5rem",
+                        }}
+                      />
+
+                      <button
+                        type="button"
+                        disabled={creatingTask || !newTaskTitle.trim() || !selectedLead}
+                        onClick={handleCreateTask}
+                        style={{
+                          padding: "0.45rem 0.9rem",
+                          borderRadius: "999px",
+                          border: "1px solid #2563eb",
+                          backgroundColor: creatingTask
+                            ? "rgba(37,99,235,0.4)"
+                            : "rgba(37,99,235,0.9)",
+                          fontSize: "0.8rem",
+                          cursor:
+                            creatingTask || !newTaskTitle.trim() || !selectedLead
+                              ? "default"
+                              : "pointer",
+                          opacity:
+                            creatingTask || !newTaskTitle.trim() || !selectedLead ? 0.6 : 1,
+                        }}
+                      >
+                        {creatingTask ? "Saving…" : "Add task"}
+                      </button>
+
+                      {taskError && (
+                        <p
+                          style={{
+                            marginTop: "0.3rem",
+                            fontSize: "0.75rem",
+                            color: "#f97316",
+                          }}
+                        >
+                          {taskError}
+                        </p>
+                      )}
+                    </div>
+
+                    {tasksLoading ? (
+                      <p style={{ fontSize: "0.8rem", color: "#9ca3af" }}>Loading tasks…</p>
+                    ) : leadTasks.length === 0 ? (
+                      <p style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
+                        No tasks yet for this lead.
+                      </p>
+                    ) : (
+                      <ul
+                        style={{
+                          listStyle: "none",
+                          padding: 0,
+                          margin: 0,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.4rem",
+                        }}
+                      >
+                        {leadTasks.map((task) => {
+                          const dueLabel = task.due_at
+                            ? new Date(task.due_at).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                              })
+                            : "No due date";
+
+                          return (
+                            <li
+                              key={task.id}
+                              style={{
+                                borderRadius: "0.6rem",
+                                border: "1px solid #1f2937",
+                                padding: "0.5rem 0.6rem",
+                                backgroundColor: "rgba(15,23,42,0.9)",
+                                opacity: task.is_completed ? 0.6 : 1,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  gap: "0.5rem",
+                                }}
+                              >
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "0.4rem",
+                                      marginBottom: "0.15rem",
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={!!task.is_completed}
+                                      onChange={(e) =>
+                                        toggleTaskCompleted(task.id, e.target.checked)
+                                      }
+                                    />
+                                    <span
+                                      style={{
+                                        fontSize: "0.85rem",
+                                        textDecoration: task.is_completed ? "line-through" : "none",
+                                      }}
+                                    >
+                                      {task.title}
+                                    </span>
+                                  </div>
+                                  {task.notes && (
+                                    <div
+                                      style={{
+                                        fontSize: "0.75rem",
+                                        color: "#9ca3af",
+                                      }}
+                                    >
+                                      {task.notes}
+                                    </div>
+                                  )}
+                                  <div
+                                    style={{
+                                      fontSize: "0.7rem",
+                                      color: "#6b7280",
+                                      marginTop: "0.15rem",
+                                    }}
+                                  >
+                                    Due: {dueLabel}
+                                  </div>
+                                </div>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {rightTab === "notes" && (
                   <div style={{ flex: 1 }}>
                     {selectedLead ? (
                       <LeadNotes leadId={selectedLead.id} />
@@ -2393,7 +2821,9 @@ export default function Home() {
                       <div style={{ color: '#9ca3af' }}>Select a lead to view notes.</div>
                     )}
                   </div>
-                ) : (
+                )}
+
+                {rightTab === "profile" && (
                   <div style={{ flex: 1 }}>
                     {selectedLead ? (
                       <LeadProfile leadId={selectedLead.id} />
@@ -2664,13 +3094,14 @@ export default function Home() {
                         setTaskSaving(true);
                         setMessage(null);
                         try {
-                          const res = await fetch("/api/tasks", {
+                          const res = await fetch("/tasks/create", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
-                              leadId: selectedLead.id,
-                              description: taskDescription.trim(),
-                              dueAt: taskDueAt || null,
+                              lead_id: selectedLead.id,
+                              agent_id: null,
+                              title: taskDescription.trim(),
+                              due_at: taskDueAt || null,
                             }),
                           });
                           const json = await res.json().catch(() => ({} as Record<string, unknown>));

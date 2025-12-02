@@ -5,7 +5,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const required = ["lead_id", "agent_id", "title"];
+    const required = ["lead_id", "title"];
     for (const field of required) {
       if (!body[field]) {
         return NextResponse.json(
@@ -24,9 +24,8 @@ export async function POST(req: Request) {
       .from("tasks")
       .insert({
         lead_id: body.lead_id,
-        agent_id: body.agent_id,
+        agent_id: body.agent_id ?? null,
         title: body.title,
-        notes: body.notes || "",
         due_at: body.due_at || null,
         priority: body.priority || "medium",
         is_completed: false,
