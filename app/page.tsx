@@ -127,24 +127,17 @@ function buildActivityText(summary: ActivitySummary | null) {
 function Header() {
   const pathname = usePathname();
 
-  const linkBaseStyle: React.CSSProperties = {
-    opacity: 0.8,
-    fontSize: "0.9rem",
-    padding: "0.35rem 0.75rem",
-    borderRadius: "999px",
-    border: "1px solid transparent",
-    textDecoration: "none",
-  };
+  const isActive = (path: string | RegExp) =>
+    typeof path === "string"
+      ? pathname === path || pathname.startsWith(path)
+      : path.test(pathname || "");
 
-  const makeLinkStyle = (isActive: boolean): React.CSSProperties => ({
-    ...linkBaseStyle,
-    opacity: isActive ? 1 : 0.7,
-    borderColor: isActive ? "rgba(148,163,184,0.5)" : "transparent",
-    backgroundColor: isActive ? "rgba(15,23,42,0.9)" : "transparent",
-  });
+  const linkClasses = (active: boolean) =>
+    `ls-nav-tab${active ? " ls-nav-tab--active" : ""}`;
 
   return (
     <header
+      className="ls-top-nav"
       style={{
         width: "100%",
         padding: "1rem 2rem",
@@ -160,38 +153,19 @@ function Header() {
         zIndex: 50,
       }}
     >
-      {/* Logo / Title */}
-      <h2 style={{ fontSize: "1.5rem", fontWeight: 600 }}>
-        Listing Scout
-      </h2>
+      <div className="ls-brand" style={{ fontSize: "1.15rem", lineHeight: 1.1 }}>
+        <div>Listing</div>
+        <div>Scout</div>
+      </div>
 
-      {/* Desktop Navigation */}
-      <nav
-        className="hidden lg:flex"
-        style={{
-          display: "flex",
-          gap: "0.75rem",
-          alignItems: "center",
-        }}
-      >
-        <Link
-          href="/"
-          style={makeLinkStyle(pathname === "/" || pathname.startsWith("/leads"))}
-        >
+      <nav className="ls-nav-tabs hidden lg:flex" style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+        <Link href="/" className={linkClasses(isActive(/^(\/|\/leads)/))}>
           Leads
         </Link>
-
-        <Link
-          href="/settings"
-          style={makeLinkStyle(pathname.startsWith("/settings"))}
-        >
+        <Link href="/settings" className={linkClasses(isActive(/^\/settings/))}>
           Settings
         </Link>
-
-        <Link
-          href="/account"
-          style={makeLinkStyle(pathname.startsWith("/account"))}
-        >
+        <Link href="/account" className={linkClasses(isActive(/^\/account/))}>
           Account
         </Link>
       </nav>
@@ -3321,6 +3295,39 @@ export default function Home() {
           /* Desktop defaults are mostly handled by inline styles.
              These rules mainly improve tablet & mobile layout. */
 
+          .ls-top-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+            padding: 0.75rem 1.25rem 0.25rem;
+          }
+
+          .ls-brand {
+            font-size: 1.15rem;
+            line-height: 1.1;
+          }
+
+          .ls-nav-tabs {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+          }
+
+          .ls-nav-tab {
+            padding: 0.3rem 0.9rem;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            opacity: 0.85;
+            text-decoration: none;
+          }
+
+          .ls-nav-tab--active {
+            background: rgba(255, 255, 255, 0.08);
+            opacity: 1;
+          }
+
           @media (max-width: 1024px) {
             .ls-page {
               padding: 1.5rem 1rem 2rem;
@@ -3422,6 +3429,24 @@ export default function Home() {
             /* Conversation area: let it breathe vertically */
             .ls-right-col .conversation-scroll {
               max-height: none;
+            }
+
+            .ls-top-nav {
+              padding: 0.6rem 1rem 0.2rem;
+              gap: 0.75rem;
+            }
+
+            .ls-brand {
+              font-size: 1rem;
+            }
+
+            .ls-nav-tabs {
+              gap: 0.4rem;
+              font-size: 0.8rem;
+            }
+
+            .ls-nav-tab {
+              padding: 0.25rem 0.7rem;
             }
           }
 
