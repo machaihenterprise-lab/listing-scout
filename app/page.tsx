@@ -2338,6 +2338,7 @@ export default function Home() {
                       </div>
                       {displayedConversation.length === 0 ? (
                         <div
+                          className="ls-conversation-card"
                           style={{
                             padding: "1rem 0.5rem",
                             color: "#e5e7eb",
@@ -3383,6 +3384,17 @@ export default function Home() {
             .ls-conversation-container,
             .ls-lead-list {
               -webkit-overflow-scrolling: touch;
+            }
+
+            /* Right column padding / width on mobile */
+            .ls-right-column {
+              padding: 1rem 1rem 1.5rem;
+            }
+
+            /* Make the conversation card fill the screen nicely */
+            .ls-conversation-card {
+              margin: 0 -0.5rem;
+              border-radius: 1rem;
             }
           }
 
