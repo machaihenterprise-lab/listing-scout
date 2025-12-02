@@ -7,9 +7,13 @@ import React, {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { supabase } from "../lib/supabaseClient";
 import { LeadNotes } from "./LeadNotes";
 import { LeadProfile } from "./LeadProfile";
+import { DailyActionItems } from "./components/DailyActionItems";
+
 
 type Lead = {
   id: string;
@@ -63,41 +67,84 @@ type Task = {
   created_at: string;
 };
 
+type ActivitySummary = {
+  since: string;
+  auto_outbound_count: number;
+  inbound_reply_count: number;
+  leads_touched_count: number;
+  new_leads_count: number;
+  tasks_created_count: number;
+};
+
+function buildActivityText(summary: ActivitySummary | null) {
+  if (!summary) {
+    return "Listing Scout is standing by. No recent activity yet.";
+  }
+
+  const parts: string[] = [];
+
+  if (summary.auto_outbound_count > 0) {
+    parts.push(
+      `${summary.auto_outbound_count} nurture SMS sent`
+    );
+  }
+
+  if (summary.inbound_reply_count > 0) {
+    parts.push(
+      `${summary.inbound_reply_count} lead ${
+        summary.inbound_reply_count === 1 ? "reply" : "replies"
+      }`
+    );
+  }
+
+  if (summary.tasks_created_count > 0) {
+    parts.push(
+      `${summary.tasks_created_count} follow-up ${
+        summary.tasks_created_count === 1 ? "task" : "tasks"
+      } created`
+    );
+  }
+
+  if (summary.leads_touched_count > 0) {
+    parts.push(
+      `${summary.leads_touched_count} lead${
+        summary.leads_touched_count === 1 ? "" : "s"
+      } touched`
+    );
+  }
+
+  if (parts.length === 0) {
+    return "In the last 24 hours, there were no new messages or tasks. Listing Scout will notify you when something needs your attention.";
+  }
+
+  return `In the last 24 hours, Listing Scout has: ${parts.join(", ")}.`;
+}
+
 /* ------------------------------------------------------------------ */
 /* Header + small helpers                                             */
 /* ------------------------------------------------------------------ */
 
-type HeaderProps = {
-  onHeightChange?: (h: number) => void;
-};
+function Header() {
+  const pathname = usePathname();
 
-function Header({ onHeightChange }: HeaderProps) {
-  const elRef = useRef<HTMLElement | null>(null);
+  const linkBaseStyle: React.CSSProperties = {
+    opacity: 0.8,
+    fontSize: "0.9rem",
+    padding: "0.35rem 0.75rem",
+    borderRadius: "999px",
+    border: "1px solid transparent",
+    textDecoration: "none",
+  };
 
-  useEffect(() => {
-    const el = elRef.current;
-    if (!el) return;
-
-    // Prefer ResizeObserver when available
-    if (typeof ResizeObserver !== "undefined") {
-      const ro = new ResizeObserver(() => {
-        onHeightChange?.(el.offsetHeight);
-      });
-      ro.observe(el);
-      // initial
-      onHeightChange?.(el.offsetHeight);
-      return () => ro.disconnect();
-    }
-
-    const measure = () => onHeightChange?.(el.offsetHeight);
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [onHeightChange]);
+  const makeLinkStyle = (isActive: boolean): React.CSSProperties => ({
+    ...linkBaseStyle,
+    opacity: isActive ? 1 : 0.7,
+    borderColor: isActive ? "rgba(148,163,184,0.5)" : "transparent",
+    backgroundColor: isActive ? "rgba(15,23,42,0.9)" : "transparent",
+  });
 
   return (
     <header
-      ref={elRef as React.RefObject<HTMLElement>}
       style={{
         width: "100%",
         padding: "1rem 2rem",
@@ -106,27 +153,50 @@ function Header({ onHeightChange }: HeaderProps) {
         alignItems: "center",
         justifyContent: "space-between",
         backdropFilter: "blur(10px)",
-        backgroundColor: "rgba(255,255,255,0.05)",
-        borderBottom: "1px solid rgba(255,255,255,0.1)",
+        backgroundColor: "rgba(15,15,30,0.9)",
+        borderBottom: "1px solid rgba(148,163,184,0.2)",
         position: "sticky",
         top: 0,
         zIndex: 50,
       }}
     >
-      <h2 style={{ fontSize: "1.5rem", fontWeight: 600 }}>Listing Scout</h2>
+      {/* Logo / Title */}
+      <h2 style={{ fontSize: "1.5rem", fontWeight: 600 }}>
+        Listing Scout
+      </h2>
 
-      <nav className="hidden lg:flex" style={{ gap: "1.5rem" }}>
-        <a href="#" style={{ opacity: 0.8 }}>
+      {/* Desktop Navigation */}
+      <nav
+        className="hidden lg:flex"
+        style={{
+          display: "flex",
+          gap: "0.75rem",
+          alignItems: "center",
+        }}
+      >
+        <Link
+          href="/"
+          style={makeLinkStyle(pathname === "/" || pathname.startsWith("/leads"))}
+        >
           Leads
-        </a>
-        <a href="#" style={{ opacity: 0.8 }}>
+        </Link>
+
+        <Link
+          href="/settings"
+          style={makeLinkStyle(pathname.startsWith("/settings"))}
+        >
           Settings
-        </a>
-        <a href="#" style={{ opacity: 0.8 }}>
+        </Link>
+
+        <Link
+          href="/account"
+          style={makeLinkStyle(pathname.startsWith("/account"))}
+        >
           Account
-        </a>
+        </Link>
       </nav>
 
+      {/* Mobile Menu Icon (can wire later) */}
       <div className="lg:hidden">
         <span style={{ fontSize: "1.5rem" }}>☰</span>
       </div>
@@ -220,6 +290,11 @@ export default function Home() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
+  const [activitySummary, setActivitySummary] = useState<ActivitySummary | null>(null);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [activityError, setActivityError] = useState<string | null>(null);
+  // Snooze state – dashboard-level
+  const [snoozedUntil, setSnoozedUntil] = useState<string | null>(null);
 
   // Conversation + reply box
   const [conversation, setConversation] = useState<MessageRow[]>([]);
@@ -277,6 +352,50 @@ export default function Home() {
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState<"low" | "medium" | "high">("medium");
   const [creatingTask, setCreatingTask] = useState(false);
+
+  // On first load, read snooze state from localStorage
+  useEffect(() => {
+    try {
+      const stored =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("ls_snoozed_until")
+          : null;
+      if (stored) {
+        setSnoozedUntil(stored);
+      }
+    } catch (err) {
+      console.error("Error reading snooze state:", err);
+    }
+  }, []);
+
+  // Helper: is dashboard currently snoozed?
+  const isSnoozed =
+    snoozedUntil != null && new Date(snoozedUntil).getTime() > Date.now();
+
+  // Toggle snooze (24 hours from now for now)
+  function handleSnoozeClick() {
+    if (isSnoozed) {
+      // Unsnooze
+      try {
+        window.localStorage.removeItem("ls_snoozed_until");
+      } catch (err) {
+        console.error("Error clearing snooze:", err);
+      }
+      setSnoozedUntil(null);
+      return;
+    }
+
+    const now = new Date();
+    const until = new Date(now.getTime() + 24 * 60 * 60 * 1000); // +24h
+
+    const iso = until.toISOString();
+    try {
+      window.localStorage.setItem("ls_snoozed_until", iso);
+    } catch (err) {
+      console.error("Error saving snooze:", err);
+    }
+    setSnoozedUntil(iso);
+  }
 
   // Mobile master/detail control: when a lead is selected we treat that
   // as the "detail" view on small screens.
@@ -354,6 +473,56 @@ export default function Home() {
       // ignore
     }
   }, [autoScrollAlways]);
+
+  // Load activity summary on mount
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSummary() {
+      try {
+        setActivityLoading(true);
+        setActivityError(null);
+
+        const res = await fetch("/api/activity-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lastSeen: null }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || "Failed to load activity summary");
+        }
+
+        if (!cancelled) {
+          setActivitySummary({
+            since: data.since,
+            auto_outbound_count: data.auto_outbound_count ?? 0,
+            inbound_reply_count: data.inbound_reply_count ?? 0,
+            leads_touched_count: data.leads_touched_count ?? 0,
+            new_leads_count: data.new_leads_count ?? 0,
+            tasks_created_count: data.tasks_created_count ?? 0,
+          });
+        }
+      } catch (err: any) {
+        console.error("Error loading activity summary:", err);
+        if (!cancelled) {
+          setActivityError(err.message || "Error loading summary");
+        }
+      } finally {
+        if (!cancelled) {
+          setActivityLoading(false);
+        }
+      }
+    }
+
+    loadSummary();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /* ------------------------------------------------------------------ */
   /* Data access helpers                                                */
@@ -1299,41 +1468,6 @@ export default function Home() {
               </span>
             </div>
           </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <button
-              ref={snoozeButtonRef}
-              type="button"
-              onClick={() => {
-                // compute popover position relative to button
-                if (snoozeButtonRef.current) {
-                  const rect = snoozeButtonRef.current.getBoundingClientRect();
-                  const popWidth = 260;
-                  // If popover would overflow the right edge, anchor to the button's left
-                  let left = rect.right - popWidth;
-                  if (rect.right + 16 > window.innerWidth) {
-                    left = rect.left;
-                  }
-                  left = Math.max(8, left + window.scrollX);
-                  const top = rect.bottom + 8 + window.scrollY;
-                  setSnoozePopoverPos({ left, top });
-                }
-                setSnoozeOpen((v) => !v);
-              }}
-              disabled={!selectedLead}
-              title={selectedLead ? "Snooze selected lead" : "Select a lead to snooze"}
-              style={{
-                padding: "0.45rem 0.75rem",
-                borderRadius: "0.6rem",
-                border: "1px solid #374151",
-                backgroundColor: !selectedLead ? "transparent" : "rgba(37,99,235,0.9)",
-                color: !selectedLead ? "#6b7280" : "#fff",
-                cursor: !selectedLead ? "default" : "pointer",
-              }}
-            >
-              ⏰ Snooze
-            </button>
-          </div>
         </div>
 
         {/* Activity summary ticker: shows what the bot did since lastSeen. */}
@@ -1345,17 +1479,17 @@ export default function Home() {
                 ) : null}
 
                 <div style={{ color: '#cbd5e1', fontSize: '0.95rem' }}>
-                  {activity ? (
-                    <div>
-                      <div>
-                        Since your last login: <strong style={{ color: '#93c5fd' }}>{activity.nurtureTexts}</strong> Nurture Texts Sent, <strong style={{ color: '#86efac' }}>{activity.newLeads}</strong> New Leads, <strong style={{ color: activity.errors > 0 ? '#fb7185' : '#94a3b8' }}>{activity.errors}</strong> Errors.
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '0.25rem' }}>
-                        Last updated: {activityUpdatedAt ? formatShortDateTime(activityUpdatedAt) : '—'}
-                      </div>
-                    </div>
+                  {isSnoozed ? (
+                    <span>
+                      Notifications are snoozed until{" "}
+                      <strong>{snoozedUntil ? formatShortDateTime(snoozedUntil) : "later"}</strong>. Listing Scout is still nurturing leads in the background — you just won&apos;t see activity summaries until snooze ends.
+                    </span>
+                  ) : activityLoading ? (
+                    "Loading activity summary..."
+                  ) : activityError ? (
+                    "Couldn’t load activity summary. Try refreshing."
                   ) : (
-                    <span>Loading activity summary…</span>
+                    buildActivityText(activitySummary)
                   )}
                 </div>
               </div>
@@ -1367,7 +1501,11 @@ export default function Home() {
                     try {
                       localStorage.setItem('ls:lastSeen', new Date().toISOString());
                     } catch {}
-                    // re-fetch activity immediately so the UI clears
+                    // Clear summary state immediately and re-fetch counts
+                    setActivitySummary(null);
+                    setActivityError(null);
+                    setActivityLoading(false);
+                    setActivity({ nurtureTexts: 0, newLeads: 0, errors: 0 });
                     try {
                       fetchActivity();
                       setActivityUpdatedAt(new Date().toISOString());
@@ -1485,6 +1623,8 @@ export default function Home() {
                   borderRadius: "1rem",
                   border: "1px solid #1f2937",
                   marginBottom: "1rem",
+                  maxHeight: "300px",
+                  overflowY: "auto",
                 }}
               >
                 <div
@@ -1545,6 +1685,9 @@ export default function Home() {
                     }}
                   >
                     {dailyTasks.map((task) => {
+                      const leadMatch = leads.find((l) => l.id === task.lead_id);
+                      const leadLabel = leadMatch?.name || leadMatch?.phone || "Unknown lead";
+
                       const dueLabel = task.due_at
                         ? new Date(task.due_at).toLocaleString("en-US", {
                             month: "short",
@@ -1560,69 +1703,89 @@ export default function Home() {
                           : task.priority === "low"
                           ? "#9ca3af"
                           : "#38bdf8";
+                      const isOverdue = task.due_at ? new Date(task.due_at).getTime() < Date.now() : false;
 
                       return (
                         <li
                           key={task.id}
+                          onClick={async () => {
+                            if (leadMatch) {
+                              await handleSelectLead(leadMatch);
+                              setRightTab("conversation");
+                            }
+                          }}
                           style={{
                             borderRadius: "0.75rem",
-                            border: "1px solid #1f2937",
+                            border: isOverdue ? "1px solid rgba(239,68,68,0.55)" : "1px solid #1f2937",
                             padding: "0.6rem 0.75rem",
                             backgroundColor: "rgba(15,23,42,0.9)",
+                            cursor: leadMatch ? "pointer" : "default",
                           }}
                         >
                           <div
                             style={{
                               display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              marginBottom: "0.25rem",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                              marginBottom: "0.35rem",
                             }}
                           >
-                            <span style={{ fontSize: "0.85rem" }}>{task.title}</span>
+                            <input
+                              type="checkbox"
+                              checked={!!task.is_completed}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => toggleTaskCompleted(task.id, e.target.checked)}
+                              title="Mark done"
+                              style={{ width: "18px", height: "18px", cursor: "pointer" }}
+                            />
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem", flex: 1 }}>
+                              <span style={{ fontSize: "0.9rem" }}>{task.title}</span>
+                              <span style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
+                                Lead: {leadLabel}
+                              </span>
+                            </div>
                             <span
                               style={{
                                 fontSize: "0.7rem",
                                 padding: "0.15rem 0.5rem",
                                 borderRadius: "999px",
-                                border: "1px solid rgba(148,163,184,0.5)",
-                                color: priorityColor,
-                              }}
-                            >
-                              {task.priority ? task.priority.toUpperCase() : "MEDIUM"}
-                            </span>
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "0.75rem",
-                              color: "#9ca3af",
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                            }}
-                          >
-                            <span>Due {dueLabel}</span>
-                            <button
-                              type="button"
-                              onClick={() => toggleTaskCompleted(task.id, true)}
+                                  border: "1px solid rgba(148,163,184,0.5)",
+                                  color: priorityColor,
+                                }}
+                              >
+                                {task.priority ? task.priority.toUpperCase() : "MEDIUM"}
+                              </span>
+                            </div>
+                            <div
                               style={{
-                                fontSize: "0.7rem",
-                                padding: "0.15rem 0.55rem",
-                                borderRadius: "999px",
-                                border: "1px solid #22c55e",
-                                backgroundColor: "rgba(22,163,74,0.1)",
-                                color: "#4ade80",
-                                cursor: "pointer",
+                                fontSize: "0.75rem",
+                                color: "#9ca3af",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
                               }}
                             >
-                              Mark done
-                            </button>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
+                              <span>Due {dueLabel}</span>
+                              {isOverdue && (
+                                <span
+                                  style={{
+                                    fontSize: "0.7rem",
+                                    padding: "0.15rem 0.5rem",
+                                    borderRadius: "999px",
+                                    border: "1px solid rgba(248,113,113,0.6)",
+                                    color: "#fecdd3",
+                                    background: "rgba(248,113,113,0.12)",
+                                  }}
+                                >
+                                  OVERDUE
+                                </span>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
               </section>
 
               <input
@@ -2111,28 +2274,28 @@ export default function Home() {
                   })}
                   <button
                     type="button"
-                    onClick={() => {
-                      setTaskModalOpen(true);
-                      setTaskDescription("");
-                      setTaskDueAt("");
-                      fetchDailyTasks();
-                    }}
-                    title="Add Task / Reminder"
+                    onClick={handleSnoozeClick}
                     style={{
                       marginLeft: "auto",
-                      padding: "0.35rem 0.7rem",
-                      borderRadius: "0.6rem",
+                      fontSize: "0.8rem",
+                      padding: "0.45rem 0.95rem",
+                      borderRadius: "999px",
                       border: "1px solid #374151",
-                      background: "rgba(37,99,235,0.15)",
-                      color: "#bfdbfe",
+                      backgroundColor: isSnoozed ? "rgba(55,65,81,0.85)" : "rgba(59,130,246,0.95)",
+                      color: isSnoozed ? "#e5e7eb" : "#f9fafb",
                       cursor: "pointer",
-                      fontSize: "0.9rem",
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "0.35rem",
                     }}
                   >
-                    🕑 Add Task
+                    {isSnoozed ? (
+                      <>
+                        😴 Snoozed until {snoozedUntil ? formatShortDateTime(snoozedUntil) : ""}
+                      </>
+                    ) : (
+                      <>😴 Snooze</>
+                    )}
                   </button>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem', justifyContent: 'flex-end' }}>
@@ -3052,8 +3215,7 @@ export default function Home() {
                         background: "rgba(15,23,42,0.9)",
                         color: "#f9fafb",
                       }}
-                      placeholder="Call about pricing strategy"
-                    />
+                      placeholder="Call about pricing strategy"                    />
                   </div>
                   <div style={{ marginBottom: "0.75rem" }}>
                     <label style={{ display: "block", color: "#cbd5e1", marginBottom: "0.25rem" }}>Due date / time</label>

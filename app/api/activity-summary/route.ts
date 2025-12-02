@@ -1,72 +1,104 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+if (!supabaseUrl || !serviceKey) {
+  console.warn(
+    "[activity-summary] Missing Supabase env vars. Check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY."
+  );
+}
+
+const supabase = createClient(supabaseUrl, serviceKey);
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const lastSeen = body?.lastSeen;
-    if (!lastSeen) {
-      return NextResponse.json({ error: "lastSeen is required" }, { status: 400 });
+    const body = await req.json().catch(() => ({} as any));
+    const lastSeen: string | undefined = body?.lastSeen;
+
+    // If the UI didn't send lastSeen, default to "last 24 hours"
+    let since: Date;
+    if (lastSeen) {
+      since = new Date(lastSeen);
+      if (isNaN(since.getTime())) {
+        // Bad date → still fall back to 24h
+        since = new Date();
+        since.setDate(since.getDate() - 1);
+      }
+    } else {
+      since = new Date();
+      since.setDate(since.getDate() - 1);
     }
+    const sinceIso = since.toISOString();
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // 1) Auto outbound messages (bot nurture)
+    const { count: autoOutboundCount, error: autoErr } = await supabase
+      .from("messages")
+      .select("*", { count: "exact", head: true })
+      .eq("direction", "OUTBOUND")
+      // if you don't have is_auto yet, comment out this line:
+      .eq("is_auto", true)
+      .gte("created_at", sinceIso);
 
-    if (!supabaseUrl || !serviceKey) {
-      return NextResponse.json({ error: "Supabase configuration missing" }, { status: 500 });
-    }
+    if (autoErr) throw autoErr;
 
-    // Query messages sent by the nurture bot (is_auto = true) since lastSeen
-    const msgsUrl = `${supabaseUrl}/rest/v1/messages?select=created_at,is_auto&created_at=gte.${encodeURIComponent(
-      lastSeen,
-    )}&is_auto=eq.true`;
+    // 2) Inbound replies from leads
+    const { count: inboundReplyCount, error: inboundErr } = await supabase
+      .from("messages")
+      .select("*", { count: "exact", head: true })
+      .eq("direction", "INBOUND")
+      .gte("created_at", sinceIso);
 
-    const leadsUrl = `${supabaseUrl}/rest/v1/leads?select=created_at&id&created_at=gte.${encodeURIComponent(
-      lastSeen,
-    )}`;
+    if (inboundErr) throw inboundErr;
 
-    const errorsUrl = `${supabaseUrl}/rest/v1/delivery_errors?select=id&created_at=gte.${encodeURIComponent(
-      lastSeen,
-    )}`;
+    // 3) Unique leads touched (any messages)
+    const { data: touchedRows, error: touchedErr } = await supabase
+      .from("messages")
+      .select("lead_id")
+      .gte("created_at", sinceIso);
 
-    const [msgsRes, leadsRes, errorsRes] = await Promise.all([
-      fetch(msgsUrl, {
-        headers: {
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-          Accept: "application/json",
-        },
-      }),
-      fetch(leadsUrl, {
-        headers: {
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-          Accept: "application/json",
-        },
-      }),
-      fetch(errorsUrl, {
-        headers: {
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-          Accept: "application/json",
-        },
-      }),
-    ]);
+    if (touchedErr) throw touchedErr;
 
-    if (!msgsRes.ok || !leadsRes.ok || !errorsRes.ok) {
-      const mText = await msgsRes.text().catch(() => "");
-      const lText = await leadsRes.text().catch(() => "");
-      const eText = await errorsRes.text().catch(() => "");
-      return NextResponse.json({ error: "Supabase REST error", details: { msgs: mText, leads: lText, errors: eText } }, { status: 502 });
-    }
+    const uniqueLeadIds = new Set(
+      (touchedRows || [])
+        .map((row: any) => row.lead_id)
+        .filter((id: string | null) => !!id)
+    );
 
-    const msgs = await msgsRes.json().catch(() => []);
-    const leads = await leadsRes.json().catch(() => []);
-    const errorsArr = await errorsRes.json().catch(() => []);
+    // 4) New leads created
+    const { count: newLeadsCount, error: newLeadsErr } = await supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", sinceIso);
 
-    const errors = Array.isArray(errorsArr) ? errorsArr.length : 0;
+    if (newLeadsErr) throw newLeadsErr;
 
-    return NextResponse.json({ ok: true, counts: { nurtureTexts: Array.isArray(msgs) ? msgs.length : 0, newLeads: Array.isArray(leads) ? leads.length : 0, errors } });
-  } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    // 5) Tasks created
+    const { count: tasksCreatedCount, error: tasksErr } = await supabase
+      .from("tasks")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", sinceIso);
+
+    if (tasksErr) throw tasksErr;
+
+    return NextResponse.json(
+      {
+        ok: true,
+        since: sinceIso,
+        auto_outbound_count: autoOutboundCount ?? 0,
+        inbound_reply_count: inboundReplyCount ?? 0,
+        leads_touched_count: uniqueLeadIds.size,
+        new_leads_count: newLeadsCount ?? 0,
+        tasks_created_count: tasksCreatedCount ?? 0,
+      },
+      { status: 200 }
+    );
+  } catch (err: any) {
+    console.error("Error in /api/activity-summary:", err);
+    return NextResponse.json(
+      { ok: false, error: err.message || "Failed to load activity summary" },
+      { status: 500 }
+    );
   }
 }
