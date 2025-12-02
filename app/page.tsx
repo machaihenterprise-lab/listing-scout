@@ -1618,7 +1618,7 @@ export default function Home() {
           )}
           {/* LEFT COLUMN: Search + Filters + Lead list (mobile: rendered after conversation) */}
           <div
-            className="ls-lead-panel ls-left-col h-full flex flex-col md:order-1 order-2"
+            className="ls-lead-panel ls-left-col ls-left-column h-full flex flex-col md:order-1 order-2"
             style={{
               flex: 1,
               gap: "1rem",
@@ -2208,7 +2208,7 @@ export default function Home() {
             {/* RIGHT COLUMN – Conversation (mobile: shown first) */}
             {(!isMobile || selectedLead) && (
               <aside
-                className="ls-conversation-panel ls-right-col h-full flex w-full flex-col md:order-2 order-1"
+                className="ls-conversation-panel ls-right-col ls-right-column h-full flex w-full flex-col md:order-2 order-1"
                 style={{
                   flex: 1.2,
                   borderRadius: "1rem",
@@ -3337,12 +3337,22 @@ export default function Home() {
             }
 
             .ls-left-col,
-            .ls-right-col {
+            .ls-right-col,
+            .ls-left-column,
+            .ls-right-column {
               width: 100%;
             }
 
             .ls-right-col {
               margin-top: 0.25rem;
+            }
+
+            /* ensure leads column shows first on mobile */
+            .ls-left-column {
+              order: 1;
+            }
+            .ls-right-column {
+              order: 2;
             }
 
             .ls-main-layout.detail-open .ls-lead-panel {
