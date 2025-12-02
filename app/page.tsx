@@ -1380,6 +1380,7 @@ export default function Home() {
       <Header />
 
       <main
+        className="ls-page"
         style={{
           minHeight: "100vh",
           maxWidth: "1100px",
@@ -1471,12 +1472,23 @@ export default function Home() {
         </div>
 
         {/* Activity summary ticker: shows what the bot did since lastSeen. */}
-        <div style={{ marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', padding: '0.75rem 1rem', borderRadius: '0.75rem', background: '#071025', border: '1px solid #1f2937' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                {hasActivity ? (
-                  <span aria-hidden className="ls-activity-badge" />
-                ) : null}
+        <div
+          className="ls-activity-bar"
+          style={{
+            marginBottom: "1.5rem",
+            padding: "0.85rem 1.25rem",
+            borderRadius: "0.875rem",
+            border: "1px solid #1f2937",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            fontSize: "0.9rem",
+          }}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {hasActivity ? (
+                <span aria-hidden className="ls-activity-badge" />
+              ) : null}
 
                 <div style={{ color: '#cbd5e1', fontSize: '0.95rem' }}>
                   {isSnoozed ? (
@@ -1492,32 +1504,31 @@ export default function Home() {
                     buildActivityText(activitySummary)
                   )}
                 </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    try {
-                      localStorage.setItem('ls:lastSeen', new Date().toISOString());
-                    } catch {}
-                    // Clear summary state immediately and re-fetch counts
-                    setActivitySummary(null);
-                    setActivityError(null);
-                    setActivityLoading(false);
-                    setActivity({ nurtureTexts: 0, newLeads: 0, errors: 0 });
-                    try {
-                      fetchActivity();
-                      setActivityUpdatedAt(new Date().toISOString());
-                    } catch {}
-                  }}
-                  style={{ padding: '0.4rem 0.6rem', borderRadius: '0.5rem', border: '1px solid #374151', background: 'transparent', color: '#9ca3af', cursor: 'pointer' }}
-                >
-                  Mark read
-                </button>
-              </div>
             </div>
-        </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    localStorage.setItem('ls:lastSeen', new Date().toISOString());
+                  } catch {}
+                  // Clear summary state immediately and re-fetch counts
+                  setActivitySummary(null);
+                  setActivityError(null);
+                  setActivityLoading(false);
+                  setActivity({ nurtureTexts: 0, newLeads: 0, errors: 0 });
+                  try {
+                    fetchActivity();
+                    setActivityUpdatedAt(new Date().toISOString());
+                  } catch {}
+                }}
+                style={{ padding: '0.4rem 0.6rem', borderRadius: '0.5rem', border: '1px solid #374151', background: 'transparent', color: '#9ca3af', cursor: 'pointer' }}
+              >
+                Mark read
+              </button>
+            </div>
+          </div>
 
         {/* Main layout: on mobile, show either list/add-lead OR conversation; side-by-side on md+ */}
         <div
@@ -1607,7 +1618,7 @@ export default function Home() {
           )}
           {/* LEFT COLUMN: Search + Filters + Lead list (mobile: rendered after conversation) */}
           <div
-            className="ls-lead-panel h-full flex flex-col md:order-1 order-2"
+            className="ls-lead-panel ls-left-col h-full flex flex-col md:order-1 order-2"
             style={{
               flex: 1,
               gap: "1rem",
@@ -2197,7 +2208,7 @@ export default function Home() {
             {/* RIGHT COLUMN – Conversation (mobile: shown first) */}
             {(!isMobile || selectedLead) && (
               <aside
-                className="ls-conversation-panel h-full flex w-full flex-col md:order-2 order-1"
+                className="ls-conversation-panel ls-right-col h-full flex w-full flex-col md:order-2 order-1"
                 style={{
                   flex: 1.2,
                   borderRadius: "1rem",
@@ -2233,15 +2244,12 @@ export default function Home() {
                 ) : null}
 
                 <div
+                  className="ls-tabs"
                   style={{
                     display: "flex",
-                    gap: "0.6rem",
-                    marginBottom: "0.9rem",
-                    fontSize: "0.9rem",
-                    padding: "0.35rem",
-                    borderRadius: "0.9rem",
-                    background: "rgba(15,23,42,0.8)",
-                    border: "1px solid #1f2937",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    marginBottom: "1rem",
                   }}
                 >
                   {[
@@ -3309,30 +3317,100 @@ export default function Home() {
 
         {/* Responsive layout rules */}
         <style jsx>{`
-          .ls-main-layout {
-            flex-direction: row;
+          /* Desktop defaults are mostly handled by inline styles.
+             These rules mainly improve tablet & mobile layout. */
+
+          @media (max-width: 1024px) {
+            .ls-page {
+              padding: 1.5rem 1rem 2rem;
+            }
+
+            .ls-activity-bar {
+              font-size: 0.9rem;
+            }
           }
 
           @media (max-width: 900px) {
             .ls-main-layout {
               flex-direction: column;
-              height: auto;
+              gap: 1.25rem;
             }
-            .ls-conversation-panel {
-              padding: 0.85rem;
-            }
-            .ls-lead-panel,
-            .ls-conversation-panel {
+
+            .ls-left-col,
+            .ls-right-col {
               width: 100%;
             }
-            .ls-lead-list {
-              max-height: none;
+
+            .ls-right-col {
+              margin-top: 0.25rem;
             }
+
             .ls-main-layout.detail-open .ls-lead-panel {
               display: none;
             }
             .ls-main-layout.detail-open .ls-conversation-panel {
               display: flex;
+            }
+            .ls-mobile-back {
+              display: inline-flex !important;
+            }
+
+            .ls-message-bubble {
+              max-width: 92% !important;
+              word-break: break-word;
+            }
+
+            .ls-conversation-container,
+            .ls-lead-list {
+              -webkit-overflow-scrolling: touch;
+            }
+          }
+
+          @media (max-width: 768px) {
+            .ls-page {
+              padding: 1.25rem 0.75rem 2rem;
+            }
+
+            .ls-page h1 {
+              font-size: 1.5rem;
+            }
+
+            .ls-activity-bar {
+              margin-bottom: 1rem;
+              padding: 0.75rem 1rem;
+              font-size: 0.85rem;
+              flex-direction: column;
+              align-items: flex-start;
+              gap: 0.5rem;
+            }
+
+            .ls-left-col section,
+            .ls-right-col {
+              padding: 1.1rem !important;
+              border-radius: 0.9rem !important;
+            }
+
+            /* Tabs row becomes horizontally scrollable chips */
+            .ls-tabs {
+              overflow-x: auto;
+              white-space: nowrap;
+              padding-bottom: 0.25rem;
+              margin-bottom: 0.75rem;
+            }
+
+            .ls-tabs::-webkit-scrollbar {
+              display: none;
+            }
+
+            .ls-tabs button {
+              flex: 0 0 auto;
+              font-size: 0.85rem;
+              padding: 0.45rem 0.8rem;
+            }
+
+            /* Conversation area: let it breathe vertically */
+            .ls-right-col .conversation-scroll {
+              max-height: none;
             }
           }
 
@@ -3356,32 +3434,6 @@ export default function Home() {
             }
             100% {
               box-shadow: 0 0 0 0 rgba(251,113,133,0);
-            }
-          }
-
-          /* Mobile-specific adjustments */
-          @media (max-width: 900px) {
-            .ls-message-bubble {
-              max-width: 92% !important;
-              word-break: break-word;
-            }
-
-            .ls-main-layout.detail-open .ls-lead-panel {
-              display: none;
-            }
-
-            .ls-main-layout.detail-open .ls-conversation-panel {
-              display: flex;
-            }
-
-            .ls-mobile-back {
-              display: inline-flex !important;
-            }
-
-            /* Make sure message + lead lists scroll nicely on mobile */
-            .ls-conversation-container,
-            .ls-lead-list {
-              -webkit-overflow-scrolling: touch;
             }
           }
         `}</style>
