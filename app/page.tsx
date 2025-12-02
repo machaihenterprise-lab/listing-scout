@@ -581,14 +581,6 @@ export default function Home() {
       });
 
       setLeads(mappedLeads);
-
-      // Auto-select a lead if none selected yet. Prefer a lead matching the
-      // current `leadFilter` so newly-created leads are immediately visible.
-      if (!selectedLead && shouldAutoselectLead && mappedLeads.length > 0) {
-        const preferred =
-          mappedLeads.find((l) => (leadFilter === 'ALL' ? true : l.status === leadFilter)) || mappedLeads[0];
-        setSelectedLead(preferred);
-      }
     } catch (err: unknown) {
       console.error("Error loading leads:", err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -598,6 +590,15 @@ export default function Home() {
       setLoadingLeads(false);
     }
   }, [selectedLead, leadFilter, shouldAutoselectLead]);
+
+  // Auto-select on desktop only; mobile stays on lead list until user taps
+  useEffect(() => {
+    if (!leads.length || selectedLead) return;
+    const isMobileViewport = typeof window !== "undefined" && window.innerWidth < 900;
+    if (!isMobileViewport) {
+      setSelectedLead(leads[0]);
+    }
+  }, [leads, selectedLead]);
 
   const fetchMessages = useCallback(
     async (leadId: string) => {
