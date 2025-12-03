@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import telnyxPackage from "telnyx";
+import Telnyx from "telnyx";
 
 // --- Env vars ---
 // (these must exist in your .env.local and on Vercel)
@@ -17,15 +17,16 @@ const supabase = createClient(supabaseUrl, serviceKey, {
 });
 
 // Telnyx client – SDK style
-const telnyx = telnyxPackage(telnyxApiKey);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const telnyx = new (Telnyx as any)(telnyxApiKey);
 
 // Define the expected shape of the request body
-interface ReplySmsBody {
+type ReplySmsBody = {
   leadId: string;
-  agentId: string; // NEW: The user who is sending the message
-  to: string; // The lead's number
-  body: string; // The message text
-}
+  to: string;
+  body: string;
+  country?: string;
+};
 
 /**
  * Normalizes a number string to E.164 format (+CCNNNNNNNNN).
@@ -56,15 +57,16 @@ function normalizeToE164(raw: string): string {
 
 export async function POST(req: Request) {
   try {
-    const body: Partial<ReplySmsBody> = await req.json().catch(() => ({}));
-    const { leadId, agentId, to, body: text } = body as Partial<ReplySmsBody>;
+    const body: Partial<ReplySmsBody & { text?: string }> = await req.json().catch(() => ({}));
+    const { leadId, to, body: textBody, text, country } = body;
+    const content = text ?? textBody;
 
     // 1. Basic Input Validation
-    if (!leadId || !agentId || !to || !text) {
-      console.error("[reply-sms] Missing required fields: leadId, agentId, to, or body.");
+    if (!leadId || !to || !content) {
+      console.error("[reply-sms] Missing required fields: leadId, to, or body.");
       return NextResponse.json(
-        { ok: false, error: "leadId, agentId, to, and body are required" },
-        { status: 400 }
+        { ok: false, error: "leadId, to, and body/text are required" },
+        { status: 400 },
       );
     }
 
@@ -77,15 +79,15 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
-    
+
     // Log the action before calling external API
-    console.log(`[reply-sms] Attempting to send SMS to ${toE164} from agent ${agentId} on lead ${leadId}`);
+    console.log(`[reply-sms] Attempting to send SMS to ${toE164} on lead ${leadId}`);
 
     // 2. Send SMS via Telnyx
     const telnyxRes = await telnyx.messages.create({
       from: telnyxFromNumber,
       to: toE164,
-      text,
+      text: content,
       messaging_profile_id: telnyxMessagingProfileId,
     });
     
@@ -99,23 +101,15 @@ export async function POST(req: Request) {
         );
     }
 
-    const providerMessageId =
-      (telnyxRes as any)?.data?.id ?? (telnyxRes as any)?.id ?? null;
-
     // 3. Log outbound message in Supabase
     const { data: insertedMessage, error: insertError } = await supabase
       .from("messages")
       .insert({
         lead_id: leadId,
-        agent_id: agentId,          // NEW: Agent who sent it
         direction: "OUTBOUND",
-        sender_type: "agent",        // NEW: Sender is always the agent here
-        channel: "SMS",
-        body: text,
+        channel: "sms",
+        body: content,
         is_auto: false,
-        from_number: telnyxFromNumber,
-        to_number: toE164,
-        provider_message_id: providerMessageId,
       })
       .select("*")
       .single();
@@ -128,7 +122,6 @@ export async function POST(req: Request) {
     // 4. Success Response
     return NextResponse.json({
       ok: true,
-      telnyxId: providerMessageId,
       message: insertedMessage,
     });
   } catch (err: any) {
