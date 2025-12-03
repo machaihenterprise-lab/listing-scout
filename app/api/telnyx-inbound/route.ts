@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-
+import { analyzeInboundIntent, InboundIntent } from "@/app/lib/inboundIntent";
+import { routeInboundMessage } from "@/app/lib/routeInboundMessage";
 
 // quick helper to normalize phone numbers for matching
 function normalizePhone(value: string | null | undefined): string | null {
@@ -141,6 +142,18 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+
+    // Use the inserted message returned from Supabase (may be null)
+    const insertedMessage = inserted ?? null;
+
+    const intent: InboundIntent = analyzeInboundIntent(insertedMessage?.body ?? text) as InboundIntent;
+
+    await routeInboundMessage({
+      supabase,
+      lead,
+      message: insertedMessage,
+      intent,
+    });
 
     // If we found a lead, update its "last activity" fields
     if (leadId) {
