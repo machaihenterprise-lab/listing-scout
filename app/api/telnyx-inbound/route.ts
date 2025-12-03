@@ -57,11 +57,11 @@ export async function POST(req: Request) {
       event?.message ||
       {};
 
-    const direction =
+    const directionRaw =
       msgPayload?.direction ||
       event?.direction ||
       payload?.direction ||
-      "inbound";
+      "INBOUND";
 
     const text =
       msgPayload?.text ||
@@ -80,6 +80,9 @@ export async function POST(req: Request) {
       msgPayload?.to_number ||
       msgPayload?.to ||
       payload?.to;
+    const channel = (msgPayload?.channel || "sms").toString().toLowerCase();
+    const direction =
+      (directionRaw as string).toUpperCase() === "OUTBOUND" ? "OUTBOUND" : "INBOUND";
 
     console.log("[telnyx-inbound] Raw payload:", JSON.stringify(payload));
     console.log("[telnyx-inbound] Parsed:", {
@@ -128,8 +131,8 @@ export async function POST(req: Request) {
       .insert({
         lead_id: leadId,
         body: text,
-        direction: "INBOUND",
-        channel: "SMS",
+        direction,
+        channel,
         is_auto: false,
       })
       .select("*")
@@ -167,6 +170,7 @@ export async function POST(req: Request) {
           last_activity_at: now,
           last_message_at: now,
           last_message_preview: preview,
+          has_unread_messages: true,
         })
         .eq("id", leadId);
 

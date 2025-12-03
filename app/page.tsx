@@ -1418,8 +1418,6 @@ export default function Home() {
       title: "Connect Your Lead Source",
       body: "Link your website form or CRM to send in new leads automatically.",
       number: "4",
-      actionLabel: "Connect Integration",
-      actionHref: "/integrations",
     },
   ];
 
@@ -2030,24 +2028,6 @@ export default function Home() {
                     ))}
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "center", marginTop: "1.4rem" }}>
-                    <a
-                      href="/integrations"
-                      style={{
-                        display: "inline-block",
-                        padding: "0.55rem 1.1rem",
-                        borderRadius: "0.65rem",
-                        border: "1px solid #2563eb",
-                        background: "rgba(37,99,235,0.85)",
-                        color: "#fff",
-                        fontWeight: 600,
-                        boxShadow: "0 8px 22px rgba(37,99,235,0.25)",
-                        textDecoration: "none",
-                      }}
-                    >
-                      Connect Integration
-                    </a>
-                  </div>
                 </div>
               ) : (
                 <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -2155,11 +2135,11 @@ export default function Home() {
                 </ul>
               )}
             </section>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.5rem",
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.5rem",
                 paddingBottom: isMobile ? "0.75rem" : "1.25rem",
                 borderTop: isMobile ? "1px solid rgba(148,163,184,0.12)" : undefined,
                 marginTop: isMobile ? "0.75rem" : "1rem",
@@ -2173,26 +2153,6 @@ export default function Home() {
                   flexWrap: "wrap",
                 }}
               >
-                {/* Compact Quick Add toggle (collapsed by default, esp. on mobile) */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMessage(null);
-                    setQuickAddOpen((v) => !v);
-                  }}
-                  style={{
-                    padding: isMobile ? "0.3rem 0.6rem" : "0.4rem 0.8rem",
-                    borderRadius: "999px",
-                    border: "1px solid #374151",
-                    backgroundColor: quickAddOpen ? "rgba(55,65,81,0.7)" : "transparent",
-                    color: "#f9fafb",
-                    cursor: "pointer",
-                    fontSize: isMobile ? "0.8rem" : "0.9rem",
-                  }}
-                >
-                  {quickAddOpen ? "Close Quick Add" : "Quick Add"}
-                </button>
-
                 {/* Primary Add Lead modal button (preferred on mobile) */}
                 <button
                   type="button"
@@ -2212,69 +2172,26 @@ export default function Home() {
                 >
                   + Add Lead
                 </button>
-              </div>
 
-              {quickAddOpen && (
-                <form
-                  onSubmit={async (evt) => {
-                    evt.preventDefault();
-                    const ok = await addLead();
-                    if (ok) {
-                      setQuickAddOpen(false);
-                    }
+                <a
+                  href="/integrations"
+                  style={{
+                    padding: isMobile ? "0.3rem 0.7rem" : "0.45rem 0.85rem",
+                    borderRadius: "999px",
+                    border: "1px solid #374151",
+                    backgroundColor: "transparent",
+                    color: "#bfdbfe",
+                    cursor: "pointer",
+                    fontSize: isMobile ? "0.8rem" : "0.9rem",
+                    textDecoration: "none",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
                   }}
-                  style={{ display: "flex", gap: "0.5rem", alignItems: "center", justifyContent: "center" }}
                 >
-                  <input
-                    ref={quickAddNameRef}
-                    type="text"
-                    placeholder="Name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    style={{
-                      padding: "0.3rem 0.5rem",
-                      borderRadius: "0.5rem",
-                      border: "1px solid #374151",
-                      backgroundColor: "rgba(15,23,42,0.9)",
-                      color: "#f9fafb",
-                      width: isMobile ? "46%" : "40%",
-                      fontSize: "0.85rem",
-                    }}
-                  />
-
-                  <input
-                    type="text"
-                    placeholder="Phone"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    style={{
-                      padding: "0.3rem 0.5rem",
-                      borderRadius: "0.5rem",
-                      border: "1px solid #374151",
-                      backgroundColor: "rgba(15,23,42,0.9)",
-                      color: "#f9fafb",
-                      width: isMobile ? "38%" : "35%",
-                      fontSize: "0.85rem",
-                    }}
-                  />
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    style={{
-                      padding: "0.32rem 0.6rem",
-                      borderRadius: "0.5rem",
-                      border: "1px solid #374151",
-                      backgroundColor: loading ? "rgba(55,65,81,0.6)" : "rgba(37,99,235,0.9)",
-                      color: "#fff",
-                      cursor: loading ? "default" : "pointer",
-                      fontSize: "0.8rem",
-                    }}
-                  >
-                    {loading ? "Adding..." : "Add"}
-                  </button>
-                </form>
-              )}
+                  🔗 Connect Integration
+                </a>
+              </div>
             </div>
           </div>
 
