@@ -93,7 +93,7 @@ export async function routeInboundMessage({
         );
       }
     }
-  } catch (err) {
-    console.error("[routeInboundMessage] Error routing inbound message:", err);
+    } catch (err) {
+      console.error("[routeInboundMessage] Error routing inbound message:", err);
+    }
   }
-}

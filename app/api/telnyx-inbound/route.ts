@@ -1,5 +1,20 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { analyzeInboundIntent, InboundIntent } from "@/app/lib/inboundIntent";
+import { routeInboundMessage } from "@/app/lib/routeInboundMessage";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Optional: if/when you add a signing secret in Telnyx
+const telnyxWebhookSecret = process.env.TELNYX_WEBHOOK_SECRET || "";
+
+if (!supabaseUrl || !serviceKey) {
+  console.error("[telnyx-inbound] Missing Supabase env vars");
+}
+
+const supabase = createClient(supabaseUrl!, serviceKey!, {
+  auth: { persistSession: false },
+});
 
 // quick helper to normalize phone numbers for matching
 function normalizePhone(value: string | null | undefined): string | null {
@@ -9,22 +24,6 @@ function normalizePhone(value: string | null | undefined): string | null {
 
 export async function POST(req: Request) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const telnyxWebhookSecret = process.env.TELNYX_WEBHOOK_SECRET || "";
-
-    if (!supabaseUrl || !serviceKey) {
-      console.error("[telnyx-inbound] Missing Supabase env vars");
-      return NextResponse.json(
-        { ok: false, error: "Supabase configuration missing" },
-        { status: 500 }
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false },
-    });
-
     // Telnyx usually sends JSON; we read it as text first in case
     const raw = await req.text();
 
@@ -55,11 +54,11 @@ export async function POST(req: Request) {
       event?.message ||
       {};
 
-    const directionRaw =
+    const direction =
       msgPayload?.direction ||
       event?.direction ||
       payload?.direction ||
-      "INBOUND";
+      "inbound";
 
     const text =
       msgPayload?.text ||
@@ -78,9 +77,6 @@ export async function POST(req: Request) {
       msgPayload?.to_number ||
       msgPayload?.to ||
       payload?.to;
-    const channel = (msgPayload?.channel || "sms").toString().toLowerCase();
-    const direction =
-      (directionRaw as string).toUpperCase() === "OUTBOUND" ? "OUTBOUND" : "INBOUND";
 
     console.log("[telnyx-inbound] Raw payload:", JSON.stringify(payload));
     console.log("[telnyx-inbound] Parsed:", {
@@ -121,40 +117,16 @@ export async function POST(req: Request) {
       console.error("[telnyx-inbound] Lead lookup error:", leadError);
     }
 
-    // Start with the matched lead (if any) then allow creation fallback
-    let leadId = lead?.id ?? null;
+    const leadId = lead?.id ?? null;
 
-    // If no lead matched, optionally create a new lead so the message appears in the UI
-    if (!leadId) {
-      try {
-        const { data: newLead, error: createLeadError } = await supabase
-          .from("leads")
-          .insert({
-            phone: fromNorm,
-            name: fromNorm,
-            source: "telnyx",
-            status: "NURTURE",
-            nurture_status: "ACTIVE",
-          })
-          .select("id")
-          .maybeSingle();
-        if (createLeadError) {
-          console.error("[telnyx-inbound] Lead create error:", createLeadError);
-        } else if (newLead?.id) {
-          leadId = newLead.id;
-        }
-      } catch (createErr) {
-        console.error("[telnyx-inbound] Lead create unexpected error:", createErr);
-      }
-    }
-
+    // Insert the inbound message
     const { data: inserted, error: insertError } = await supabase
       .from("messages")
       .insert({
         lead_id: leadId,
         body: text,
-        direction,
-        channel,
+        direction: "INBOUND",
+        channel: "SMS",
         is_auto: false,
       })
       .select("*")
@@ -167,9 +139,23 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+    
+    if (!inserted) {
+      console.error("[telnyx-inbound] Message insert returned no data");
+      return NextResponse.json(
+        { ok: false, error: "Failed to log message" },
+        { status: 500 }
+      );
+    }
 
-    // Use the inserted message returned from Supabase (may be null)
-    const insertedMessage = inserted ?? null;
+    const intent = analyzeInboundIntent(inserted.body);
+    await routeInboundMessage({
+      supabase,
+      lead,
+      message: inserted,
+      intent,
+    });
+
 
     // If we found a lead, update its "last activity" fields
     if (leadId) {
@@ -182,7 +168,6 @@ export async function POST(req: Request) {
           last_activity_at: now,
           last_message_at: now,
           last_message_preview: preview,
-          has_unread_messages: true,
         })
         .eq("id", leadId);
 

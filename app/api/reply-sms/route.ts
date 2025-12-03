@@ -1,85 +1,69 @@
+// app/api/reply-sms/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import Telnyx from "telnyx";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const telnyxApiKey = process.env.TELNYX_API_KEY!;
-const telnyxMessagingProfileId = process.env.TELNYX_MESSAGING_PROFILE_ID!;
-const telnyxUsNumber = process.env.TELNYX_US_NUMBER!;
-const telnyxCaNumber = process.env.TELNYX_CA_NUMBER ?? null;
-
-// Supabase (service) client
-const supabase = createClient(supabaseUrl, serviceKey, {
-  auth: { persistSession: false },
-});
-
-// Telnyx client
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const telnyx = new (Telnyx as any)(telnyxApiKey);
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const {
-      leadId,
-      to,
-      body: text,
-      country,
-    }: { leadId?: string; to?: string; body?: string; country?: string } = body;
+    const { leadId, to, body: text } = await req.json();
 
     if (!leadId || !to || !text) {
-      console.error("[reply-sms] Missing required fields:", body);
       return NextResponse.json(
-        { ok: false, error: "leadId, to and body are required" },
-        { status: 400 },
+        { ok: false, error: "Missing required fields" },
+        { status: 400 }
       );
     }
 
-    if (!supabaseUrl || !serviceKey || !telnyxApiKey || !telnyxMessagingProfileId) {
-      console.error("[reply-sms] Missing env vars", {
-        hasSupabaseUrl: !!supabaseUrl,
-        hasServiceKey: !!serviceKey,
-        hasTelnyxApiKey: !!telnyxApiKey,
-        hasProfileId: !!telnyxMessagingProfileId,
-      });
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceKey) {
+      console.error("Missing Supabase env vars");
       return NextResponse.json(
-        { ok: false, error: "Server configuration error" },
-        { status: 500 },
+        { ok: false, error: "Server misconfiguration" },
+        { status: 500 }
       );
     }
 
-    // Pick correct from-number (US default, CA if explicitly requested)
-    const fromNumber =
-      country === "CA" && telnyxCaNumber ? telnyxCaNumber : telnyxUsNumber;
+    const supabase = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
 
-    // 1) Send via Telnyx
-    let telnyxMessage: any;
-    try {
-      telnyxMessage = await telnyx.messages.create({
-        from: fromNumber,
+    // Send SMS via Telnyx
+    const telnyxKey = process.env.TELNYX_API_KEY;
+    const telnyxFrom = process.env.TELNYX_MESSAGING_PHONE;
+
+    if (!telnyxKey || !telnyxFrom) {
+      console.error("Missing Telnyx env vars");
+      return NextResponse.json(
+        { ok: false, error: "Missing Telnyx configuration" },
+        { status: 500 }
+      );
+    }
+
+    const sendRes = await fetch("https://api.telnyx.com/v2/messages", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${telnyxKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: telnyxFrom,
         to,
         text,
-        messaging_profile_id: telnyxMessagingProfileId,
-      });
-      console.log(
-        "[reply-sms] Telnyx message sent",
-        telnyxMessage?.data?.id ?? telnyxMessage,
-      );
-    } catch (err: any) {
-      console.error(
-        "[reply-sms] Telnyx send error",
-        err?.response?.body ?? err,
-      );
+      }),
+    });
+
+    const sendBody = await sendRes.json();
+
+    if (!sendRes.ok) {
+      console.error("Telnyx send error", sendBody);
       return NextResponse.json(
-        { ok: false, error: "Failed to send via Telnyx" },
-        { status: 502 },
+        { ok: false, error: "Failed to send SMS" },
+        { status: 500 }
       );
     }
 
-    const telnyxMessageId = telnyxMessage?.data?.id ?? null;
-
-    // 2) Log in messages table
+    // 1️⃣ Insert outbound message into Supabase
     const { data: insertedMessage, error: insertError } = await supabase
       .from("messages")
       .insert({
@@ -88,25 +72,33 @@ export async function POST(req: Request) {
         channel: "SMS",
         body: text,
         is_auto: false,
-        telnyx_message_id: telnyxMessageId,
       })
       .select("*")
       .single();
 
     if (insertError) {
-      console.error("[reply-sms] Supabase insert error", insertError);
+      console.error("[reply-sms] DB insert error:", insertError);
       return NextResponse.json(
-        { ok: false, error: "Failed to log message" },
-        { status: 500 },
+        { ok: false, error: "Message inserted failed" },
+        { status: 500 }
       );
     }
 
-    return NextResponse.json({ ok: true, message: insertedMessage });
+    // 2️⃣ Update lead's last_contacted_at
+    await supabase
+      .from("leads")
+      .update({ last_contacted_at: new Date().toISOString() })
+      .eq("id", leadId);
+
+    return NextResponse.json({
+      ok: true,
+      message: insertedMessage,
+    });
   } catch (err) {
-    console.error("[reply-sms] Unexpected error", err);
+    console.error("reply-sms unhandled error:", err);
     return NextResponse.json(
-      { ok: false, error: "Unexpected error" },
-      { status: 500 },
+      { ok: false, error: "Server error" },
+      { status: 500 }
     );
   }
 }
