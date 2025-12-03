@@ -102,9 +102,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2) Log outbound message in Supabase
-    const providerMessageId = telnyxRes?.data?.data?.id ?? telnyxRes?.data?.id ?? null;
-
+    // 2) Log outbound message in Supabase (keep columns minimal to match your table)
     const { data: insertedMessage, error: insertError } = await supabase
       .from("messages")
       .insert({
@@ -113,8 +111,6 @@ export async function POST(req: Request) {
         channel: "sms",
         body: content,
         is_auto: false,
-        provider: "telnyx",
-        provider_message_id: providerMessageId,
       })
       .select("*")
       .single();
@@ -122,7 +118,7 @@ export async function POST(req: Request) {
     if (insertError) {
       console.error("[reply-sms] Supabase insert error", insertError);
       return NextResponse.json(
-        { ok: false, error: "Failed to log message" },
+        { ok: false, error: "Failed to log message", details: insertError.message || insertError },
         { status: 500 },
       );
     }
