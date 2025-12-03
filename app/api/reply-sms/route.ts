@@ -1,91 +1,55 @@
-// app/api/telnyx-inbound/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+function normalizeToE164(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("+")) return trimmed;
 
-const supabase = createClient(supabaseUrl, serviceKey, {
-  auth: { persistSession: false },
-});
-
-function normalizePhone(value: string | null | undefined): string | null {
-  if (!value) return null;
-  return value.replace(/[^\d]/g, "");
+  const digits = trimmed.replace(/[^\d]/g, "");
+  if (digits.length === 10) {
+    // US/CA local 10-digit number
+    return "+1" + digits;
+  }
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return "+" + digits;
+  }
+  if (digits.length > 0) {
+    return "+" + digits;
+  }
+  return null;
 }
 
 export async function POST(req: Request) {
   try {
-    const payload = await req.json().catch(() => null);
-    console.log("[telnyx-inbound] payload:", payload);
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    // Telnyx message webhooks usually have data.record_type === "message"
-    const msg = payload?.data;
-    if (!msg || msg.record_type !== "message") {
-      return NextResponse.json({ ok: true, ignored: true });
-    }
-
-    const fromRaw = msg.from?.phone_number as string | undefined;
-    const toRaw =
-      (Array.isArray(msg.to) && msg.to[0]?.phone_number) ||
-      (msg.to?.phone_number as string | undefined);
-    const body = msg.text as string;
-
-    const fromNorm = normalizePhone(fromRaw);
-    if (!fromNorm) {
-      console.error("[telnyx-inbound] Missing from number");
+    if (!supabaseUrl || !serviceKey) {
+      console.error("[telnyx-inbound] Missing Supabase env vars");
       return NextResponse.json(
-        { ok: false, error: "Missing from phone" },
-        { status: 400 }
-      );
-    }
-
-    // Find matching lead by phone (basic version: match on last digits)
-    const { data: leads, error: leadError } = await supabase
-      .from("leads")
-      .select("id, phone");
-
-    if (leadError) {
-      console.error("[telnyx-inbound] leadError:", leadError);
-    }
-
-    let leadId: string | null = null;
-    if (leads && leads.length > 0) {
-      const match = leads.find((l: any) => {
-        const lp = normalizePhone(l.phone);
-        return lp && lp.endsWith(fromNorm);
-      });
-      if (match) {
-        leadId = match.id;
-      }
-    }
-
-    const { data: inserted, error: insertError } = await supabase
-      .from("messages")
-      .insert({
-        lead_id: leadId,
-        direction: "INBOUND",
-        channel: "SMS",
-        body,
-        is_auto: false,
-      })
-      .select("*")
-      .single();
-
-    if (insertError) {
-      console.error("[telnyx-inbound] insertError:", insertError);
-      return NextResponse.json(
-        { ok: false, error: "Failed to store message" },
+        { ok: false, error: "Supabase env missing" },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ ok: true, message: inserted });
-  } catch (err: any) {
-    console.error("[telnyx-inbound] Error:", err);
-    return NextResponse.json(
-      { ok: false, error: err?.message || "Server error" },
-      { status: 500 }
-    );
-  }
-}
+    const body = await req.json();
+    console.log("[telnyx-inbound] raw body", JSON.stringify(body));
+
+    const eventType =
+      body?.data?.event_type || body?.event_type || body?.webhook_type;
+
+    if (eventType !== "message.received" && eventType !== "message.received") {
+      console.log("[telnyx-inbound] ignoring non-message event", eventType);
+      return NextResponse.json({ ok: true, ignored: true });
+    }
+
+    const record = body?.data?.record || body?.data?.payload || body?.data || {};
+
+    const text: string = record?.text || record?.body || "";
+    const fromRaw: string | null = record?.from?.phone_number || null;
+    const toRaw: string | null =
+      record?.to?.[0]?.phone_number || record?.to?.phone_number || null;
+
+    const fromNumber = normalizeToE164(fromRaw);
+    const toNumber = normalizeToE164(to
