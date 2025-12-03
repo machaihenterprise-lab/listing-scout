@@ -4,17 +4,21 @@ import Telnyx from "telnyx";
 
 // --- Env vars ---
 // (these must exist in your .env.local and on Vercel)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const telnyxApiKey = process.env.TELNYX_API_KEY!;
-const telnyxMessagingProfileId = process.env.TELNYX_MESSAGING_PROFILE_ID!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const telnyxApiKey = process.env.TELNYX_API_KEY
+const telnyxMessagingProfileId = process.env.TELNYX_MESSAGING_PROFILE_ID
 // Ensure your Telnyx sending number is in E.164 format, e.g., +13479198781
-const telnyxFromNumber = process.env.TELNYX_US_NUMBER!;
+const telnyxFromNumber = process.env.TELNYX_US_NUMBER || process.env.TELNYX_CA_NUMBER
+
+if (!supabaseUrl || !serviceKey) {
+  throw new Error("Missing required Supabase environment variables.")
+}
 
 // Supabase (service role) – server-side only
 const supabase = createClient(supabaseUrl, serviceKey, {
   auth: { persistSession: false },
-});
+})
 
 // Telnyx client – SDK style
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
