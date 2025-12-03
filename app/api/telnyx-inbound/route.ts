@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { analyzeInboundIntent } from "@/app/lib/inboundIntent";
-import { routeInboundMessage } from "@/app/lib/routeInboundMessage";
 
 
 // quick helper to normalize phone numbers for matching
@@ -135,14 +133,6 @@ export async function POST(req: Request) {
       })
       .select("*")
       .maybeSingle();
-     
-      const intent = analyzeInboundIntent(message.body); 
-      await routeInboundMessage({
-        supabase,
-        lead,
-        message,
-        intent,
-});
 
     if (insertError) {
       console.error("[telnyx-inbound] Insert error:", insertError);
