@@ -1,51 +1,45 @@
 // app/lib/inboundIntent.ts
 
-export type InboundIntent =
-  | { type: "STOP"; score: number }
-  | { type: "HELP"; score: number }
-  | { type: "POSITIVE"; score: number }
-  | { type: "NEGATIVE"; score: number }
-  | { type: "OTHER"; score: number };
+export type InboundIntentType = "STOP" | "HELP" | "POSITIVE" | "NEGATIVE" | "OTHER";
 
-/**
- * Very simple keyword-based intent detection for inbound SMS.
- * We can make this smarter later, but this is enough to power routing.
- */
-export function analyzeInboundIntent(body: string): InboundIntent {
-  const text = (body || "").toLowerCase().trim();
+export type InboundIntent = {
+  type: InboundIntentType;
+  raw: string;
+};
 
-  if (!text) {
-    return { type: "OTHER", score: 0 };
+function normalize(text: string): string {
+  return text.trim().toUpperCase();
+}
+
+export function analyzeInboundIntent(body: string | null | undefined): InboundIntent {
+  if (!body) {
+    return { type: "OTHER", raw: "" };
   }
 
-  // Hard opt-out words
-  if (/\bstop\b|\bunsubscribe\b|\bquit\b/.test(text)) {
-    return { type: "STOP", score: 1 };
+  const raw = body;
+  const text = normalize(body);
+
+  // Standard carrier keywords
+  if (["STOP", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"].includes(text)) {
+    return { type: "STOP", raw };
   }
 
-  // Help requests
-  if (/\bhelp\b|\bsupport\b|\bwho is this\b|\bwhat is this\b/.test(text)) {
-    return { type: "HELP", score: 0.9 };
+  if (["HELP", "INFO"].includes(text)) {
+    return { type: "HELP", raw };
   }
 
-  // Positive / interested replies
+  // Very simple positive / negative heuristic
+  const lower = body.toLowerCase();
+
   if (
-    /\byes\b|\byeah\b|\byep\b|\bsure\b|\binterested\b|\blet'?s talk\b|\bcall me\b|\bwhen can\b/.test(
-      text
-    )
+    /yes|yeah|yep|sure|sounds good|interested|let's talk|call me|ok/i.test(lower)
   ) {
-    return { type: "POSITIVE", score: 0.8 };
+    return { type: "POSITIVE", raw };
   }
 
-  // Negative / not interested
-  if (
-    /\bno\b|\bnot interested\b|\bstop calling\b|\bdon'?t text\b|\bleave me\b/.test(
-      text
-    )
-  ) {
-    return { type: "NEGATIVE", score: 0.8 };
+  if (/no thanks|not interested|stop bothering|leave me alone/i.test(lower)) {
+    return { type: "NEGATIVE", raw };
   }
 
-  // Fallback
-  return { type: "OTHER", score: 0.2 };
+  return { type: "OTHER", raw };
 }

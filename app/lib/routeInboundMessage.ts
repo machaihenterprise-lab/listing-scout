@@ -1,99 +1,99 @@
 // app/lib/routeInboundMessage.ts
+import type { InboundIntent } from "./inboundIntent";
 
-type InboundIntent = {
-  type: "STOP" | "HELP" | "POSITIVE" | "NEGATIVE" | "OTHER";
-  score?: number;
+type RouteInboundParams = {
+  supabase: any;        // we can tighten this later
+  message: any;         // the inserted message row
+  lead: any | null;     // lead row, or null if not matched
+  intent: InboundIntent;
 };
 
-/**
- * Central place to decide what to do with an inbound message
- * after we've:
- *   - saved it in `messages`
- *   - detected the intent (STOP / positive / etc)
- *
- * For now we keep DB changes minimal and just log system notes.
- * Later we can expand this to:
- *   - pause automation
- *   - mark lead HOT / NOT INTERESTED
- *   - create follow-up tasks
- */
-export async function routeInboundMessage(opts: {
-  supabase: any;             // Supabase client created in the API route
-  messageId: string;         // id of the inbound row in `messages`
-  leadId: string | null;     // may be null if we couldn't match a lead
-  intent: InboundIntent;     // result from analyzeInboundIntent
-  fromPhone: string;         // lead's phone
-  toPhone: string;           // our Telnyx number
-}) {
-  const { supabase, messageId, leadId, intent, fromPhone, toPhone } = opts;
+export async function routeInboundMessage({
+  supabase,
+  message,
+  lead,
+  intent,
+}: RouteInboundParams): Promise<void> {
+  try {
+    if (!lead) {
+      console.warn(
+        "[routeInboundMessage] No lead found for inbound message",
+        message?.id
+      );
+      return;
+    }
 
-  // If we somehow don't have an intent, just bail
-  if (!intent || !intent.type) {
-    console.warn("[routeInboundMessage] Missing intent", {
-      messageId,
-      leadId,
-      fromPhone,
-    });
-    return;
-  }
+    const leadId = lead.id as string;
 
-  // Helper to insert a little system note into messages
-  async function addSystemNote(body: string) {
-    if (!leadId) return; // nothing to attach to
+    // 1) System note summarizing what we detected
+    let noteBody: string;
 
-    const { error } = await supabase.from("messages").insert({
+    switch (intent.type) {
+      case "STOP":
+        noteBody =
+          "📵 Lead replied with an opt-out keyword (STOP/UNSUBSCRIBE). Automation should remain paused for this lead.";
+        break;
+      case "HELP":
+        noteBody =
+          "❓ Lead asked for help / more info. Consider replying manually to clarify who you are and why you're texting.";
+        break;
+      case "POSITIVE":
+        noteBody =
+          "🔥 Lead replied positively / with interest. This lead may be HOT and ready for follow-up.";
+        break;
+      case "NEGATIVE":
+        noteBody =
+          "🙅 Lead replied negatively / not interested. You may want to pause future outreach.";
+        break;
+      default:
+        noteBody =
+          "📩 New inbound reply received. Review the conversation and decide next steps.";
+        break;
+    }
+
+    await supabase.from("messages").insert({
       lead_id: leadId,
-      body,
-      is_auto: true,
       direction: "SYSTEM",
+      channel: "SMS",
+      body: noteBody,
+      is_auto: true,
     });
 
-    if (error) {
-      console.error("[routeInboundMessage] Failed to insert system note", error);
+    // 2) Optional lead updates. Wrap in try/catch in case these columns
+    //     don't exist yet in your schema.
+    if (intent.type === "STOP") {
+      try {
+        await supabase
+          .from("leads")
+          .update({
+            status: "opt_out",         // only if your schema has this
+            automation_paused: true,   // only if your schema has this
+          })
+          .eq("id", leadId);
+      } catch (err) {
+        console.warn(
+          "[routeInboundMessage] Could not update lead for STOP intent:",
+          err
+        );
+      }
     }
+
+    if (intent.type === "POSITIVE") {
+      try {
+        await supabase
+          .from("leads")
+          .update({
+            status: "hot",             // matches your HOT pill if you use it
+          })
+          .eq("id", leadId);
+      } catch (err) {
+        console.warn(
+          "[routeInboundMessage] Could not update lead for POSITIVE intent:",
+          err
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[routeInboundMessage] Error routing inbound message:", err);
   }
-
-  switch (intent.type) {
-    case "STOP": {
-      // Carrier / compliance behaviour should eventually:
-      // - mark lead as do-not-contact
-      // - stop automation
-      await addSystemNote(
-        "System: Lead replied with STOP. You should stop messaging this contact unless they re-opt in."
-      );
-      break;
-    }
-
-    case "HELP": {
-      await addSystemNote(
-        "System: Lead requested HELP. Make sure your contact details and support info are visible."
-      );
-      break;
-    }
-
-    case "POSITIVE": {
-      await addSystemNote(
-        "System: Detected a positive reply. Consider marking this lead HOT and scheduling a follow-up call."
-      );
-      break;
-    }
-
-    case "NEGATIVE": {
-      await addSystemNote(
-        "System: Detected a negative reply. Consider marking this lead as Not Interested."
-      );
-      break;
-    }
-
-    case "OTHER":
-    default: {
-      // No special routing for now
-      break;
-    }
-  }
-
-  // Later we can also:
-  // - auto-create tasks
-  // - update lead status / automation flags
-  // once we lock in the exact column names in your `leads` table.
 }

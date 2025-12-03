@@ -1,131 +1,146 @@
+// app/api/reply-sms/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import Telnyx from "telnyx";
 
-// Defer creating the Supabase service client until request time so
-// the module can be evaluated during build even if env vars are not set.
-function getSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const telnyxApiKey = process.env.TELNYX_API_KEY!;
+const telnyxMessagingProfileId =
+  process.env.TELNYX_MESSAGING_PROFILE_ID || undefined;
+const telnyxFromNumber = process.env.TELNYX_US_NUMBER || "";
 
-  if (!supabaseUrl || !supabaseServiceKey) {
-    return null;
+// Supabase (service role) – server side only
+const supabase = createClient(supabaseUrl, serviceKey, {
+  auth: { persistSession: false },
+});
+
+// Telnyx client (ESM)
+const telnyx = new (Telnyx as any)(telnyxApiKey);
+
+// Turn "6137777818" or "+1 613 777 7818" into "+16137777818"
+function normalizeToE164(raw: string): string {
+  if (!raw) return raw;
+  const trimmed = raw.trim();
+
+  // already E.164
+  if (trimmed.startsWith("+")) return trimmed;
+
+  const digits = trimmed.replace(/[^\d]/g, ""); // keep only numbers
+  let full = digits;
+
+  if (digits.length === 10) {
+    // US/CA local
+    full = "1" + digits;
+  } else if (digits.length === 11 && digits.startsWith("1")) {
+    full = digits;
   }
 
-  return createClient(supabaseUrl, supabaseServiceKey);
+  return "+" + full;
 }
 
 export async function POST(req: Request) {
   try {
-    const { leadId, to, body } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { leadId, to, text } = body as {
+      leadId?: string;
+      to?: string;
+      text?: string;
+    };
 
-    if (!leadId || !to || !body) {
+    if (!leadId || !to || !text) {
       return NextResponse.json(
-        { error: "Missing leadId, to, or body" },
-        { status: 400 }
+        { ok: false, error: "leadId, to, and text are required" },
+        { status: 400 },
       );
     }
 
-    const apiKey = process.env.TELNYX_API_KEY;
-    const profileId = process.env.TELNYX_MESSAGING_PROFILE_ID;
-    const fromNumber = process.env.TELNYX_US_NUMBER; // TODO: later choose US/CA based on lead
+    if (!telnyxApiKey || !telnyxFromNumber) {
+      console.error("[reply-sms] Missing Telnyx env vars", {
+        hasKey: !!telnyxApiKey,
+        hasFrom: !!telnyxFromNumber,
+        hasProfile: !!telnyxMessagingProfileId,
+      });
 
-    if (!apiKey || !profileId || !fromNumber) {
       return NextResponse.json(
-        { error: "Telnyx environment variables are not set" },
-        { status: 500 }
+        { ok: false, error: "Telnyx configuration missing on server" },
+        { status: 500 },
       );
     }
 
-    // 1) Send SMS via Telnyx API
-    const telnyxRes = await fetch("https://api.telnyx.com/v2/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        from: fromNumber,
-        to,
-        text: body,
-        messaging_profile_id: profileId,
-      }),
-    });
+    const toPhone = normalizeToE164(to);
 
-    const telnyxJson = await telnyxRes.json().catch(() => ({}));
+    // 1) Send SMS via Telnyx
+    let telnyxRes: any;
+    try {
+      telnyxRes = await telnyx.messages.create({
+        from: telnyxFromNumber,
+        to: toPhone,
+        text,
+        // Only include messaging_profile_id if you actually have it set
+        ...(telnyxMessagingProfileId
+          ? { messaging_profile_id: telnyxMessagingProfileId }
+          : {}),
+      });
 
-    if (!telnyxRes.ok) {
-      console.error("Telnyx error:", telnyxRes.status, telnyxJson);
-      // Attempt to persist the delivery error for later inspection/metrics
-      try {
-          const supabase = getSupabaseClient();
-          if (supabase) {
-            await supabase.from("delivery_errors").insert({
-              lead_id: leadId,
-              to_phone: to,
-              provider: "telnyx",
-              status_code: telnyxRes.status,
-              error_text:
-                telnyxJson?.errors?.[0]?.detail || JSON.stringify(telnyxJson),
-              payload: telnyxJson ?? {},
-            });
-          } else {
-            console.warn("Supabase client not configured; skipping delivery error persist");
-          }
-      } catch (dbErr) {
-        console.error("Failed to log delivery error to Supabase:", dbErr);
-      }
+      console.log("[reply-sms] Telnyx response", telnyxRes?.data || telnyxRes);
+    } catch (err: any) {
+      console.error(
+        "[reply-sms] Telnyx send error",
+        err?.response?.data || err?.data || err,
+      );
 
       return NextResponse.json(
         {
-          error:
-            telnyxJson?.errors?.[0]?.detail ||
-            `Failed to send SMS via Telnyx (status ${telnyxRes.status})`,
+          ok: false,
+          error: "Failed to send via Telnyx",
+          details: err?.response?.data || err?.data || String(err),
         },
-        { status: 500 }
+        { status: 502 },
       );
     }
 
-    // 2) Log outbound message in Supabase (service role)
-    try {
-      const supabase = getSupabaseClient();
-      if (!supabase) {
-        console.error("Supabase service role key is not configured");
-        return NextResponse.json({ error: "Supabase service key is required" }, { status: 500 });
-      }
+    // 2) Log outbound message in Supabase
+    const providerMessageId =
+      telnyxRes?.data?.data?.id ?? telnyxRes?.data?.id ?? null;
 
-      const { error: insertError } = await supabase.from("messages").insert({
+    const { data: insertedMessage, error: insertError } = await supabase
+      .from("messages")
+      .insert({
         lead_id: leadId,
         direction: "OUTBOUND",
         channel: "SMS",
-        body,
+        body: text,
         is_auto: false,
-      });
+        provider: "telnyx",
+        provider_message_id: providerMessageId,
+      })
+      .select("*")
+      .single();
 
-      if (insertError) {
-        console.error("Supabase insert error:", insertError);
-        return NextResponse.json(
-          {
-            warning: "SMS sent but logging to Supabase failed",
-            supabaseError: insertError.message,
-          },
-          { status: 200 }
-        );
-      }
-    } catch (dbErr) {
-      console.error("Unexpected DB error logging message:", dbErr);
+    if (insertError) {
+      console.error("[reply-sms] Supabase insert error", insertError);
+      // We *still* return ok:true because the SMS was sent;
+      // but we include the error for debugging.
+      return NextResponse.json(
+        {
+          ok: true,
+          warning: "SMS sent but failed to log in Supabase",
+          insertError,
+        },
+        { status: 200 },
+      );
     }
 
     return NextResponse.json(
-      {
-        success: true,
-        telnyxMessageId: telnyxJson?.data?.id ?? null,
-      },
-      { status: 200 }
+      { ok: true, message: insertedMessage },
+      { status: 200 },
     );
-  } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : "Unexpected server error";
-    console.error("Unexpected /api/reply-sms error:", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (err: any) {
+    console.error("[reply-sms] Unexpected error", err);
+    return NextResponse.json(
+      { ok: false, error: "Unexpected server error" },
+      { status: 500 },
+    );
   }
 }

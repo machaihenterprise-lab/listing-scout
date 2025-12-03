@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { analyzeInboundIntent } from "@/app/lib/inboundIntent";
-import { routeInboundMessage } from "@/app/lib/routeInboundMessage";
 
 // quick helper to normalize phone numbers for matching
 function normalizePhone(value: string | null | undefined): string | null {
@@ -123,9 +121,33 @@ export async function POST(req: Request) {
       console.error("[telnyx-inbound] Lead lookup error:", leadError);
     }
 
-    const leadId = lead?.id ?? null;
+    // Start with the matched lead (if any) then allow creation fallback
+    let leadId = lead?.id ?? null;
 
-    // Insert the inbound message
+    // If no lead matched, optionally create a new lead so the message appears in the UI
+    if (!leadId) {
+      try {
+        const { data: newLead, error: createLeadError } = await supabase
+          .from("leads")
+          .insert({
+            phone: fromNorm,
+            name: fromNorm,
+            source: "telnyx",
+            status: "NURTURE",
+            nurture_status: "ACTIVE",
+          })
+          .select("id")
+          .maybeSingle();
+        if (createLeadError) {
+          console.error("[telnyx-inbound] Lead create error:", createLeadError);
+        } else if (newLead?.id) {
+          leadId = newLead.id;
+        }
+      } catch (createErr) {
+        console.error("[telnyx-inbound] Lead create unexpected error:", createErr);
+      }
+    }
+
     const { data: inserted, error: insertError } = await supabase
       .from("messages")
       .insert({
@@ -148,16 +170,6 @@ export async function POST(req: Request) {
 
     // Use the inserted message returned from Supabase (may be null)
     const insertedMessage = inserted ?? null;
-    
-    const intent = analyzeInboundIntent(text);
-    await routeInboundMessage({
-      supabase,
-      messageId: insertedMessage?.id,
-      leadId,
-      intent,
-      fromPhone: fromNumber,
-      toPhone: toNumber,
-    });
 
     // If we found a lead, update its "last activity" fields
     if (leadId) {

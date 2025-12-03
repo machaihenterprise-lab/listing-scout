@@ -926,14 +926,19 @@ export default function Home() {
     setSendingReply(true);
     setMessage(null);
 
+    const payload: Record<string, unknown> = {
+      leadId: selectedLead.id,
+      to: selectedLead.phone,
+      body: trimmed,
+    };
+    if ((selectedLead as any)?.country) {
+      payload.country = (selectedLead as any).country;
+    }
+
     const res = await fetch("/api/reply-sms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        leadId: selectedLead.id,
-        to: selectedLead.phone,
-        body: trimmed,
-      }),
+      body: JSON.stringify(payload),
     });
 
     // Update last_contacted_at
@@ -947,7 +952,7 @@ export default function Home() {
 
     const data = await res.json().catch(() => ({} as Record<string, unknown>));
 
-    if (!res.ok) {
+    if (!res.ok || (typeof data === "object" && "ok" in data && !(data as any).ok)) {
       console.error("reply-sms API returned error", res.status, data);
       const apiError =
         data && typeof data === "object" && "error" in data && typeof (data as Record<string, unknown>)["error"] === "string"
@@ -957,19 +962,24 @@ export default function Home() {
       return;
     }
 
-    // ✅ LOCAL ECHO: show the new message immediately in the UI
-    const nowIso = new Date().toISOString();
-    setConversation((prev) => [
-      ...prev,
-      {
-        id: `local-${nowIso}`, // temporary local id
-        lead_id: selectedLead.id,
-        direction: "OUTBOUND",
-        channel: "sms",
-        body: trimmed,
-        created_at: nowIso,
-      } as MessageRow,
-    ]);
+    // Prefer the message returned by the API (has ids), otherwise local echo
+    const returnedMsg = (data as any)?.message as MessageRow | undefined;
+    if (returnedMsg) {
+      setConversation((prev) => [...prev, returnedMsg]);
+    } else {
+      const nowIso = new Date().toISOString();
+      setConversation((prev) => [
+        ...prev,
+        {
+          id: `local-${nowIso}`, // temporary local id
+          lead_id: selectedLead.id,
+          direction: "OUTBOUND",
+          channel: "sms",
+          body: trimmed,
+          created_at: nowIso,
+        } as MessageRow,
+      ]);
+    }
 
     // After local echo, immediately scroll so the user's message is visible
     // Use double rAF to ensure DOM update has applied
@@ -2330,16 +2340,15 @@ export default function Home() {
                     <div
                       className="ls-conversation-container conversation-scroll"
                       style={{
-                        position: 'relative',
+                        position: "relative",
                         flex: 1,
                         borderRadius: "0.75rem",
                         border: "1px solid #444",
-                        padding: "0.75rem 1rem 1rem 1rem",
+                        padding: "0.75rem 1rem 1.25rem 1rem",
                         overflowY: "auto",
                         display: "flex",
                         flexDirection: "column",
                         gap: "0.75rem",
-                        paddingBottom: "3.5rem", // give space above sticky input
                       }}
                       ref={messagesEndRef}
                     >
@@ -2688,8 +2697,7 @@ export default function Home() {
                       className="ls-reply-form"
                       style={{
                         flexShrink: 0,
-                        position: "sticky",
-                        bottom: 0,
+                        position: "static",
                         background: "rgba(7,12,22,0.9)",
                         backdropFilter: "blur(8px)",
                         borderRadius: "0.9rem",
