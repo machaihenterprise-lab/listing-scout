@@ -1,22 +1,14 @@
 // app/api/reply-sms/route.ts
+// app/api/reply-sms/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import Telnyx from "telnyx";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const telnyxApiKey = process.env.TELNYX_API_KEY!;
-const telnyxMessagingProfileId =
-  process.env.TELNYX_MESSAGING_PROFILE_ID || undefined;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const telnyxApiKey = process.env.TELNYX_API_KEY;
+const telnyxMessagingProfileId = process.env.TELNYX_MESSAGING_PROFILE_ID || undefined;
 const telnyxFromNumber = process.env.TELNYX_US_NUMBER || "";
-
-// Supabase (service role) – server side only
-const supabase = createClient(supabaseUrl, serviceKey, {
-  auth: { persistSession: false },
-});
-
-// Telnyx client (ESM)
-const telnyx = new (Telnyx as any)(telnyxApiKey);
 
 // Turn "6137777818" or "+1 613 777 7818" into "+16137777818"
 function normalizeToE164(raw: string): string {
@@ -42,19 +34,30 @@ function normalizeToE164(raw: string): string {
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { leadId, to, text } = body as {
-      leadId?: string;
-      to?: string;
-      text?: string;
-    };
+    const {
+      leadId,
+      to,
+      text,
+      body: bodyField,
+      country,
+    }: { leadId?: string; to?: string; text?: string; body?: string; country?: string } = body;
 
-    if (!leadId || !to || !text) {
+    const content = text ?? bodyField;
+
+    if (!leadId || !to || !content) {
       return NextResponse.json(
-        { ok: false, error: "leadId, to, and text are required" },
+        { ok: false, error: "leadId, to, and text/body are required" },
         { status: 400 },
       );
     }
 
+    if (!supabaseUrl || !serviceKey) {
+      console.error("[reply-sms] Missing Supabase env vars");
+      return NextResponse.json(
+        { ok: false, error: "Supabase configuration missing on server" },
+        { status: 500 },
+      );
+    }
     if (!telnyxApiKey || !telnyxFromNumber) {
       console.error("[reply-sms] Missing Telnyx env vars", {
         hasKey: !!telnyxApiKey,
@@ -67,6 +70,12 @@ export async function POST(req: Request) {
         { status: 500 },
       );
     }
+
+    const supabase = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const telnyx = new (Telnyx as any)(telnyxApiKey);
 
     const toPhone = normalizeToE164(to);
 
