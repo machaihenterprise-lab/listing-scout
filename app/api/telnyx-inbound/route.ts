@@ -1,19 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-// Optional: if/when you add a signing secret in Telnyx
-const telnyxWebhookSecret = process.env.TELNYX_WEBHOOK_SECRET || "";
-
-if (!supabaseUrl || !serviceKey) {
-  console.error("[telnyx-inbound] Missing Supabase env vars");
-}
-
-const supabase = createClient(supabaseUrl!, serviceKey!, {
-  auth: { persistSession: false },
-});
-
 // quick helper to normalize phone numbers for matching
 function normalizePhone(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -22,6 +9,22 @@ function normalizePhone(value: string | null | undefined): string | null {
 
 export async function POST(req: Request) {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const telnyxWebhookSecret = process.env.TELNYX_WEBHOOK_SECRET || "";
+
+    if (!supabaseUrl || !serviceKey) {
+      console.error("[telnyx-inbound] Missing Supabase env vars");
+      return NextResponse.json(
+        { ok: false, error: "Supabase configuration missing" },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
+
     // Telnyx usually sends JSON; we read it as text first in case
     const raw = await req.text();
 
