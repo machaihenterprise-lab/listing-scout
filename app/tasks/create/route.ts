@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ task: data }, { status: 200 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Unexpected API error:", err);
     return NextResponse.json(
       { error: "Failed to create task" },

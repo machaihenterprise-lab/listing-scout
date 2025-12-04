@@ -48,7 +48,6 @@ export function LeadProfile({ leadId }: LeadProfileProps) {
   const [budgetMin, setBudgetMin] = useState<string>("");
   const [budgetMax, setBudgetMax] = useState<string>("");
   const [tags, setTags] = useState<string[]>([]);
-  const tagOptions = ["VIP", "Follow-up", "Not interested", "Bad number"];
 
   const applyDataToState = (d: ProfileData) => {
     setName(d.name || "");
@@ -136,38 +135,6 @@ export function LeadProfile({ leadId }: LeadProfileProps) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
-    }
-  };
-
-  const toggleTag = (tag: string) => {
-    setTags((prev) => {
-      const next = prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag];
-      try {
-        window.localStorage.setItem(`lead_tags_${leadId}`, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
-
-  const handleMarkBadNumber = async () => {
-    if (!leadId) return;
-    try {
-      await supabase!.from("leads").update({ status: "BAD_NUMBER" }).eq("id", leadId);
-      setError(null);
-      setData((prev) => (prev ? { ...prev, status: "BAD_NUMBER" } : prev));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  const handleSnooze24h = async () => {
-    if (!leadId) return;
-    const until = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    try {
-      await supabase!.from("leads").update({ nurture_status: "SNOOZED", nurture_locked_until: until }).eq("id", leadId);
-      setData((prev) => (prev ? { ...prev, nurture_status: "SNOOZED", nurture_locked_until: until } : prev));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
     }
   };
 

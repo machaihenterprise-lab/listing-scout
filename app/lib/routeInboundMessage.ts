@@ -2,10 +2,23 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { InboundIntent } from "./inboundIntent";
 
+type LeadRow = {
+  id: string;
+  name?: string | null;
+  full_name?: string | null;
+  agent_id?: string | null;
+};
+
+type MessageRow = {
+  id: string;
+  lead_id: string;
+  body: string;
+};
+
 type RouteInboundArgs = {
-  supabase: SupabaseClient<any, "public", any>;
-  lead: any | null;      // row from leads table (can tighten later)
-  message: any;          // row from messages table
+  supabase: SupabaseClient<unknown, "public", unknown>;
+  lead: LeadRow | null;
+  message: MessageRow;
   intent: InboundIntent;
 };
 

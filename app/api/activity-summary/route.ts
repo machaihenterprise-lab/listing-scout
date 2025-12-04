@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+type ActivitySummaryRequest = {
+  lastSeen?: string;
+};
+
 export async function POST(req: Request) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -16,7 +20,7 @@ export async function POST(req: Request) {
 
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const body = await req.json().catch(() => ({} as any));
+    const body: ActivitySummaryRequest = await req.json().catch(() => ({}));
     const lastSeen: string | undefined = body?.lastSeen;
 
     // If the UI didn't send lastSeen, default to "last 24 hours"
@@ -64,8 +68,8 @@ export async function POST(req: Request) {
 
     const uniqueLeadIds = new Set(
       (touchedRows || [])
-        .map((row: any) => row.lead_id)
-        .filter((id: string | null) => !!id)
+        .map((row) => row.lead_id)
+        .filter((id): id is string => typeof id === "string" && !!id)
     );
 
     // 4) New leads created
@@ -96,10 +100,11 @@ export async function POST(req: Request) {
       },
       { status: 200 }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error in /api/activity-summary:", err);
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { ok: false, error: err.message || "Failed to load activity summary" },
+      { ok: false, error: message || "Failed to load activity summary" },
       { status: 500 }
     );
   }

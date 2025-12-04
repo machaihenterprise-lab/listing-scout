@@ -89,6 +89,7 @@ export async function POST(req: Request) {
     });
 
     const telnyxBodyText = await telnyxRes.text();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let telnyxBody: any;
     try {
       telnyxBody = JSON.parse(telnyxBodyText);
@@ -149,6 +150,7 @@ export async function POST(req: Request) {
       },
       { status: 200 }
     );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error("[reply-sms] Unexpected error:", err);
     return NextResponse.json(

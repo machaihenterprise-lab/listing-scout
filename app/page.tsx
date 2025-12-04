@@ -12,7 +12,6 @@ import { usePathname } from "next/navigation";
 import { supabase } from "../lib/supabaseClient";
 import { LeadNotes } from "./LeadNotes";
 import { LeadProfile } from "./LeadProfile";
-import { DailyActionItems } from "./components/DailyActionItems";
 
 
 type Lead = {
@@ -41,6 +40,7 @@ type Lead = {
   target_areas?: string | null;
   target_property_type?: string | null;
   move_timeline?: string | null;
+  country?: string | null;
 };
 
 type MessageRow = {
@@ -53,6 +53,8 @@ type MessageRow = {
   message_type?: string | null;
   is_private?: boolean | null;
   sender_type?: string | null;
+  from_number?: string | null;
+  to_number?: string | null;
 };
 
 type Task = {
@@ -309,7 +311,7 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
   const [leadFilter, setLeadFilter] = useState<"HOT" | "NURTURE" | "ALL" | "UNREAD">("NURTURE");
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddOpen] = useState(false);
   const quickAddNameRef = useRef<HTMLInputElement | null>(null);
   const modalNameRef = useRef<HTMLInputElement | null>(null);
 
@@ -330,7 +332,6 @@ export default function Home() {
 
   // Activity summary (While you were sleeping)
   const [activity, setActivity] = useState<null | { nurtureTexts: number; newLeads: number; errors: number }>(null);
-  const [activityUpdatedAt, setActivityUpdatedAt] = useState<string | null>(null);
   const hasActivity = !!activity && ((activity.nurtureTexts || 0) > 0 || (activity.newLeads || 0) > 0 || (activity.errors || 0) > 0);
 
   // --- Tasks state ---
@@ -411,7 +412,7 @@ export default function Home() {
   const SCROLL_THRESHOLD_PX = 150; // distance from bottom to consider "near bottom"
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const [autoScrollAlways, setAutoScrollAlways] = useState(false);
-  const [shouldAutoselectLead, setShouldAutoselectLead] = useState(true); // prevents re-auto-select after mobile back
+  const [, setShouldAutoselectLead] = useState(true); // prevents re-auto-select after mobile back
   const [showNotesInline, setShowNotesInline] = useState(true);
   // Task modal state
   const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -487,10 +488,11 @@ export default function Home() {
             tasks_created_count: data.tasks_created_count ?? 0,
           });
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error loading activity summary:", err);
         if (!cancelled) {
-          setActivityError(err.message || "Error loading summary");
+          const msg = err instanceof Error ? err.message : String(err);
+          setActivityError(msg || "Error loading summary");
         }
       } finally {
         if (!cancelled) {
@@ -597,7 +599,7 @@ export default function Home() {
     } finally {
       setLoadingLeads(false);
     }
-  }, [selectedLead, leadFilter, shouldAutoselectLead]);
+  }, []);
 
   // Auto-select on desktop only; mobile stays on lead list until user taps
   useEffect(() => {
@@ -608,24 +610,46 @@ export default function Home() {
     }
   }, [leads, selectedLead]);
 
+  const buildPhoneVariants = (value: string | null | undefined): string[] => {
+    if (!value) return [];
+    const digits = value.replace(/[^\d]/g, "");
+    const plusE164 = digits ? `+${digits}` : null;
+    const local10 = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : null;
+    return Array.from(
+      new Set(
+        [value, digits || null, plusE164, local10 ? `+1${local10}` : null, local10]
+          .filter(Boolean)
+          .map((v) => v as string)
+      )
+    );
+  };
+
   const fetchMessages = useCallback(
-    async (leadId: string) => {
+    async (leadId: string, leadPhone?: string | null) => {
       try {
         console.log("[fetchMessages] for lead", leadId);
 
         // Query messages for the specific lead only so the conversation pane
         // shows messages belonging to the selected lead (filter by lead_id).
+        const phoneFilters = buildPhoneVariants(leadPhone).flatMap((v) => [
+          `from_number.eq.${v}`,
+          `to_number.eq.${v}`,
+        ]);
+
+        const orFilters = [`lead_id.eq.${leadId}`, ...phoneFilters].join(",");
+
         const { data, error } = await supabase!
           .from("messages")
           .select("*")
-          .eq("lead_id", leadId)
+          .or(orFilters)
           .order("created_at", { ascending: true });
 
         console.log("[fetchMessages] result", { error, data });
 
         if (error) {
           console.error("Error loading messages:", error);
-          setMessage(`Error loading messages: ${error.message || "Unknown error"}`);
+          const msg = error instanceof Error ? error.message : String(error);
+          setMessage(`Error loading messages: ${msg || "Unknown error"}`);
           return;
         }
 
@@ -648,10 +672,46 @@ export default function Home() {
               (raw["is_private"] as boolean) ??
               (inferredType === "NOTE" || raw["channel"] === "note"),
             sender_type: (raw["sender_type"] as string) ?? undefined,
+            from_number: (raw["from_number"] as string | null | undefined) ?? null,
+            to_number: (raw["to_number"] as string | null | undefined) ?? null,
           } as MessageRow;
         });
 
-        setConversation(mapped);
+        const phoneSet = new Set(buildPhoneVariants(leadPhone));
+        // Prefer explicit lead matches; only fall back to phone matching when lead_id is missing.
+        const leadMatched = mapped.filter((m) => m.lead_id === leadId);
+        const phoneMatched =
+          leadMatched.length > 0
+            ? []
+            : mapped.filter((m) => {
+                if (phoneSet.size === 0) return false;
+                return (
+                  (m.from_number && phoneSet.has(m.from_number)) ||
+                  (m.to_number && phoneSet.has(m.to_number))
+                );
+              });
+
+        const pool = leadMatched.length > 0 ? leadMatched : phoneMatched;
+
+        // Deduplicate rows (local echoes + DB rows + phone matches)
+        const unique = new Map<string, MessageRow>();
+        for (const msg of pool) {
+          const key =
+            msg.id ||
+            `${msg.direction}-${msg.body}-${msg.created_at}-${msg.from_number ?? ""}-${msg.to_number ?? ""}`;
+          if (!unique.has(key)) unique.set(key, msg);
+        }
+
+        const filtered = Array.from(unique.values());
+
+        // Sort chronologically to keep UI stable
+        filtered.sort((a, b) => {
+          const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return aTime - bTime;
+        });
+
+        setConversation(filtered);
 
         // After messages render, schedule a double requestAnimationFrame to ensure
         // layout is settled before scrolling. Use a direct scroll here to avoid
@@ -723,7 +783,6 @@ export default function Home() {
   }, [setDailyTasks]);
 
   // Create a new task for the selected lead
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleCreateTask = useCallback(async () => {
     if (!selectedLead) {
       setTaskError("Select a lead before creating a task.");
@@ -776,7 +835,7 @@ export default function Home() {
     } finally {
       setCreatingTask(false);
     }
-  }, [fetchDailyTasks, newTaskDueDate, newTaskNotes, newTaskPriority, newTaskTitle, selectedLead]);
+  }, [fetchDailyTasks, newTaskDueDate, newTaskPriority, newTaskTitle, selectedLead]);
 
   // Toggle complete on a task
   const toggleTaskCompleted = useCallback(
@@ -910,7 +969,7 @@ export default function Home() {
     setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, has_unread_messages: false } : l)));
     // messages + polling are handled by the effect below; this call
     // gives you a snappier initial load when switching leads:
-    await fetchMessages(lead.id);
+    await fetchMessages(lead.id, lead.phone);
   };
 
   const handleSendReply = async () => {
@@ -931,8 +990,8 @@ export default function Home() {
       to: selectedLead.phone,
       body: trimmed,
     };
-    if ((selectedLead as any)?.country) {
-      payload.country = (selectedLead as any).country;
+    if (selectedLead.country) {
+      payload.country = selectedLead.country;
     }
 
     const res = await fetch("/api/reply-sms", {
@@ -950,9 +1009,9 @@ export default function Home() {
     // Refresh leads so "Last contacted" etc stay in sync
     await fetchLeads();
 
-    const data = await res.json().catch(() => ({} as Record<string, unknown>));
+    const data: unknown = await res.json().catch(() => ({}));
 
-    if (!res.ok || (typeof data === "object" && "ok" in data && !(data as any).ok)) {
+    if (!res.ok || (typeof data === "object" && data !== null && "ok" in data && (data as { ok?: boolean }).ok === false)) {
       console.error("reply-sms API returned error", res.status, data);
       const apiError =
         data && typeof data === "object" && "error" in data && typeof (data as Record<string, unknown>)["error"] === "string"
@@ -963,7 +1022,10 @@ export default function Home() {
     }
 
     // Prefer the message returned by the API (has ids), otherwise local echo
-    const returnedMsg = (data as any)?.message as MessageRow | undefined;
+    const returnedMsg =
+      typeof data === "object" && data !== null && "message" in data
+        ? (data as { message?: MessageRow }).message
+        : undefined;
     if (returnedMsg) {
       setConversation((prev) => [...prev, returnedMsg]);
     } else {
@@ -1150,7 +1212,7 @@ export default function Home() {
     if (newLead) {
       setSelectedLead(newLead);
       try {
-        await fetchMessages(newLead.id);
+        await fetchMessages(newLead.id, newLead.phone);
       } catch {
         // ignore fetchMessages errors — polling will pick up messages
       }
@@ -1229,24 +1291,28 @@ export default function Home() {
     setAutomationPaused(status === "PAUSED" || status === "SNOOZED");
   }, [selectedLead?.id, selectedLead?.nurture_status]);
 
+  const selectedLeadKey = selectedLead ? `${selectedLead.id}|${selectedLead.phone ?? ""}` : null;
+
   // When a lead is selected:
   // - load messages immediately
   // - start polling every 5 seconds
   // - stop polling when lead changes or component unmounts
   useEffect(() => {
     if (!selectedLead?.id) return;
+    const leadId = selectedLead.id;
+    const leadPhone = selectedLead.phone;
 
     // Initial load
-    fetchMessages(selectedLead.id);
+    fetchMessages(leadId, leadPhone);
 
     const intervalId = window.setInterval(() => {
-      fetchMessages(selectedLead.id);
+      fetchMessages(leadId, leadPhone);
     }, 5000);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [selectedLead?.id, fetchMessages]);
+  }, [selectedLeadKey, fetchMessages, selectedLead?.id, selectedLead?.phone]);
 
   // Whenever selected lead changes, load that lead's tasks
   useEffect(() => {
@@ -1285,7 +1351,6 @@ export default function Home() {
     } else {
       setLeadTasks([]);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLead?.id]);
 
   // Observe scroll position to know whether the user is scrolled up
@@ -1376,10 +1441,6 @@ export default function Home() {
       return bt - at;
     });
 
-  const privateNotes = conversation.filter((m) => {
-    const type = (m.message_type || "").toUpperCase();
-    return type === "NOTE" || m.is_private || m.channel === "note";
-  });
   const displayedConversation = selectedLead
     ? conversation.filter((m) => m.lead_id === selectedLead.id)
     : [];
@@ -2252,18 +2313,20 @@ export default function Home() {
                     marginBottom: "1rem",
                   }}
                 >
-                  {[
-                    { id: "conversation", label: "Conversation" },
-                    { id: "tasks", label: "Tasks" },
-                    { id: "profile", label: "Profile" },
-                    { id: "notes", label: "Notes" },
-                  ].map((tab) => {
+                  {(
+                    [
+                      { id: "conversation", label: "Conversation" },
+                      { id: "tasks", label: "Tasks" },
+                      { id: "profile", label: "Profile" },
+                      { id: "notes", label: "Notes" },
+                    ] as Array<{ id: typeof rightTab; label: string }>
+                  ).map((tab) => {
                     const active = rightTab === tab.id;
                     return (
                       <button
                         key={tab.id}
                         type="button"
-                        onClick={() => setRightTab(tab.id as any)}
+                        onClick={() => setRightTab(tab.id)}
                         style={{
                           padding: "0.45rem 0.9rem",
                           borderRadius: "0.75rem",

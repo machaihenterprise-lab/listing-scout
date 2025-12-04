@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const NURTURE_SECRET = process.env.NEXT_PUBLIC_NURTURE_SECRET;
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
@@ -27,7 +25,18 @@ const TEMPLATES: Record<string, string> = {
   LONG_TERM: `Hi {{name}}. I noticed a few homes sold in your area recently. Are you tracking local prices or should I send you a quick summary?`,
 };
 
-function personalize(template: string, lead: any) {
+type LeadRow = {
+  id: string;
+  name?: string | null;
+  phone?: string | null;
+  country?: string | null;
+  nurture_stage?: string | null;
+  next_nurture_at?: string | null;
+  last_nurture_sent_at?: string | null;
+  agent_id?: string | null;
+};
+
+function personalize(template: string, lead: LeadRow) {
   return template
     .replace("{{name}}", lead.name || "there")
     .replace("{{agent}}", "Machaih");
@@ -63,9 +72,14 @@ function normalizeToE164(raw: string | null, country?: string | null): string | 
   const digits = trimmed.replace(/[^\d]/g, "");
   if (!digits) return null;
 
+  const region = country?.toUpperCase();
+
   // assume US/CA for now
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  if (!region || region === "US" || region === "CA") {
+    if (digits.length === 10) return `+1${digits}`;
+    if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  }
+
   return `+${digits}`;
 }
 
@@ -85,7 +99,7 @@ async function sendViaTelnyx(to: string, text: string) {
   });
 
   const bodyText = await res.text();
-  let body: any;
+  let body: unknown;
   try {
     body = JSON.parse(bodyText);
   } catch {
@@ -128,7 +142,7 @@ async function runNurtureOnce() {
   let sentCount = 0;
   const now = new Date().toISOString();
 
-  for (const lead of leads) {
+  for (const lead of leads as LeadRow[]) {
     try {
       const to = normalizeToE164(lead.phone, lead.country);
       if (!to) {
@@ -176,7 +190,7 @@ async function handleRun(req: Request) {
   try {
     // ✅ Optional protection: require secret in body if set
     if (nurtureSecret) {
-      const body = await req.json().catch(() => ({} as any));
+      const body = (await req.json().catch(() => ({}))) as { secret?: string };
       if (body.secret !== nurtureSecret) {
         return NextResponse.json(
           { ok: false, error: "Unauthorized" },
@@ -187,10 +201,11 @@ async function handleRun(req: Request) {
 
     const { sentCount } = await runNurtureOnce();
     return NextResponse.json({ ok: true, sentCount }, { status: 200 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[run-nurture] Fatal error", err);
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { ok: false, error: err?.message || String(err) },
+      { ok: false, error: message },
       { status: 500 },
     );
   }

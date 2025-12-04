@@ -14,7 +14,10 @@ export async function POST(req: Request) {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const { task_id, is_completed } = await req.json();
+    const { task_id, is_completed } = (await req.json()) as {
+      task_id?: string;
+      is_completed?: boolean;
+    };
 
     const { error } = await supabase
       .from("tasks")
@@ -24,10 +27,11 @@ export async function POST(req: Request) {
     if (error) throw error;
 
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error updating task:", err);
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { ok: false, error: err.message || "Failed to update task" },
+      { ok: false, error: message || "Failed to update task" },
       { status: 500 }
     );
   }

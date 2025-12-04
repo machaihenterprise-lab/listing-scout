@@ -18,8 +18,19 @@ export interface InboundIntent {
  * Very simple keyword-based intent detector.
  * We can make this smarter later, but it's enough to drive automation.
  */
-export function analyzeInboundIntent(body: string | null | undefined): InboundIntent {
-  const raw = body ?? "";
+export type AnalyzeInboundIntentInput =
+  | string
+  | null
+  | undefined
+  | {
+      text?: string | null | undefined;
+      leadId?: string | null;
+      fromPhone?: string | null;
+      toPhone?: string | null;
+    };
+
+export function analyzeInboundIntent(body: AnalyzeInboundIntentInput): InboundIntent {
+  const raw = typeof body === "string" || body === null || body === undefined ? body ?? "" : body.text ?? "";
   const normalized = raw.trim().toLowerCase();
 
   if (!normalized) {

@@ -1,131 +1,121 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { analyzeInboundIntent, InboundIntent } from "@/app/lib/inboundIntent";
+import { analyzeInboundIntent } from "@/app/lib/inboundIntent";
 import { routeInboundMessage } from "@/app/lib/routeInboundMessage";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-// Optional: if/when you add a signing secret in Telnyx
-const telnyxWebhookSecret = process.env.TELNYX_WEBHOOK_SECRET || "";
-
-if (!supabaseUrl || !serviceKey) {
-  console.error("[telnyx-inbound] Missing Supabase env vars");
-}
-
-const supabase = createClient(supabaseUrl!, serviceKey!, {
-  auth: { persistSession: false },
-});
 
 // quick helper to normalize phone numbers for matching
 function normalizePhone(value: string | null | undefined): string | null {
   if (!value) return null;
-  return value.replace(/[^\d]/g, ""); // keep only digits
+  return value.replace(/[^\d]/g, ""); // keep digits only
 }
 
 export async function POST(req: Request) {
   try {
-    // Telnyx usually sends JSON; we read it as text first in case
-    const raw = await req.text();
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+    const telnyxWebhookSecret = process.env.TELNYX_WEBHOOK_SECRET || "";
+    void telnyxWebhookSecret; // reserved for future signature verification
 
-    let payload: any;
-    try {
-      payload = JSON.parse(raw);
-    } catch (err) {
-      console.error("[telnyx-inbound] Failed to parse JSON", err);
+    const supabase = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
+
+    const body = await req.json();
+
+    // adjust these paths if yours are slightly different
+    const payload = body?.data?.payload;
+    const text: string = payload?.text || "";
+    const fromNumberRaw: string = payload?.from?.phone_number || "";
+    const toNumberRaw: string = payload?.to?.[0]?.phone_number || "";
+
+    if (!text || !fromNumberRaw) {
+      console.error("[telnyx-inbound] missing text or from number");
       return NextResponse.json(
-        { ok: false, error: "Invalid JSON" },
+        { ok: false, error: "Missing text or from number" },
         { status: 400 }
       );
     }
 
-    // Optional: signature verification (left as TODO so we don’t block you)
-    if (telnyxWebhookSecret) {
-      // TODO: verify Telnyx signature using telnyxWebhookSecret
-      // For now we just log that we *could* verify
-      console.log("[telnyx-inbound] TELNYX_WEBHOOK_SECRET set; skipping verify for now.");
+    // ---- find the lead by phone ----
+    const normalized = normalizePhone(fromNumberRaw); // e.g. 14322095555
+    let local10 = normalized;
+    if (normalized && normalized.length === 11 && normalized.startsWith("1")) {
+      local10 = normalized.slice(1); // 10-digit local version
     }
 
-    // Telnyx event shapes can vary a bit; we try a few common layouts
-    const event = payload?.data || payload?.event || payload;
-    const eventData =
-      event?.payload ||
-      event?.record ||
-      event?.data ||
-      event?.message ||
-      {};
+    // we’ll try multiple variants: raw, +E164, digits, 10-digit
+    const plusE164 = normalized ? `+${normalized}` : null;
 
-    // 1) Find the lead by phone
-    const fromNumber = normalizePhone(
-      eventData?.from?.phone_number ??
-        eventData?.from_number ??
-        eventData?.from ??
-        null
-    );
-    const toNumber = normalizePhone(
-      eventData?.to?.[0]?.phone_number ??
-        eventData?.to?.phone_number ??
-        eventData?.to_number ??
-        eventData?.to ??
-        null
-    );
-    const text: string = eventData?.text ?? eventData?.body ?? eventData?.content ?? "";
+    const orFilters = [
+      fromNumberRaw,
+      normalized,
+      local10,
+      plusE164,
+    ]
+      .filter(Boolean)
+      .map((v) => `phone.eq.${v}`)
+      .join(",");
 
-    if (!text || !fromNumber) {
-      return NextResponse.json(
-        { ok: false, error: "Missing text or fromNumber" },
-        { status: 400 }
-      );
-    }
-
-    const { data: lead, error: leadError } = await supabase
+    const { data: leadMatch, error: leadErr } = await supabase
       .from("leads")
-      .select("*")
-      .eq("phone", fromNumber)
-      .maybeSingle();
+      .select("id, phone")
+      .or(orFilters)
+      .limit(1)
+      .single();
 
-    if (leadError) {
-      console.error("[telnyx-inbound] error loading lead:", leadError);
+    if (leadErr && leadErr.code !== "PGRST116") {
+      // PGRST116 = no rows; ignore that one
+      console.error("[telnyx-inbound] lead lookup error", leadErr);
     }
 
-    // 2) Insert the inbound message
+    const leadId = leadMatch?.id ?? null;
+
+    // ---- insert the inbound message, now with lead_id ----
     const { data: insertedMessage, error: insertError } = await supabase
       .from("messages")
       .insert({
-        lead_id: lead?.id ?? null,
+        lead_id: leadId,
         direction: "INBOUND",
         channel: "SMS",
         body: text,
         is_auto: false,
-        from_number: fromNumber,
-        to_number: toNumber,
+        from_number: fromNumberRaw,
+        to_number: toNumberRaw,
       })
       .select("*")
       .single();
 
-    if (insertError) {
-      console.error("[telnyx-inbound] failed to log inbound message:", insertError);
+    if (insertError || !insertedMessage) {
+      console.error("[telnyx-inbound] Failed to log message", insertError);
       return NextResponse.json(
         { ok: false, error: "Failed to log message" },
         { status: 500 }
       );
     }
 
-    // 3) Analyze intent + auto-route
-    const intent: InboundIntent = analyzeInboundIntent(text);
+    // ---- analyze intent + route automation ----
+    const intent = await analyzeInboundIntent({
+      text,
+      leadId,
+      fromPhone: fromNumberRaw,
+      toPhone: toNumberRaw,
+    });
 
     await routeInboundMessage({
       supabase,
-      lead: lead ?? null,
+      lead: leadMatch ?? null,
       message: insertedMessage,
       intent,
     });
 
-    // 4) Respond OK to Telnyx
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("[telnyx-inbound] Unexpected error:", err);
+    console.error("[telnyx-inbound] fatal error", err);
     return NextResponse.json(
-      { ok: false, error: "Internal error" },
+      {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      },
       { status: 500 }
     );
   }
