@@ -1,45 +1,59 @@
 // app/lib/inboundIntent.ts
 
-export type InboundIntentType = "STOP" | "HELP" | "POSITIVE" | "NEGATIVE" | "OTHER";
+export type InboundIntentKind =
+  | "STOP"       // stop / unsubscribe
+  | "POSITIVE"   // yes / interested
+  | "NEGATIVE"   // no / sold / not interested
+  | "NOT_NOW"    // later / months from now
+  | "QUESTION"   // ends with ? or looks like a question
+  | "UNKNOWN";
 
-export type InboundIntent = {
-  type: InboundIntentType;
+export interface InboundIntent {
+  kind: InboundIntentKind;
   raw: string;
-};
-
-function normalize(text: string): string {
-  return text.trim().toUpperCase();
+  normalized: string;
 }
 
+/**
+ * Very simple keyword-based intent detector.
+ * We can make this smarter later, but it's enough to drive automation.
+ */
 export function analyzeInboundIntent(body: string | null | undefined): InboundIntent {
-  if (!body) {
-    return { type: "OTHER", raw: "" };
+  const raw = body ?? "";
+  const normalized = raw.trim().toLowerCase();
+
+  if (!normalized) {
+    return { kind: "UNKNOWN", raw, normalized };
   }
 
-  const raw = body;
-  const text = normalize(body);
-
-  // Standard carrier keywords
-  if (["STOP", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"].includes(text)) {
-    return { type: "STOP", raw };
+  // STOP / opt-out (keep this one very strong)
+  const stopWords = ["stop", "unsubscribe", "remove", "quit", "cancel", "end"];
+  if (stopWords.some((w) => normalized === w || normalized.startsWith(w + " "))) {
+    return { kind: "STOP", raw, normalized };
   }
 
-  if (["HELP", "INFO"].includes(text)) {
-    return { type: "HELP", raw };
+  // Positive / yes-ish replies
+  const positiveWords = ["yes", "yeah", "yep", "yup", "sure", "absolutely", "sounds good", "interested"];
+  if (positiveWords.some((w) => normalized === w || normalized.includes(w))) {
+    return { kind: "POSITIVE", raw, normalized };
   }
 
-  // Very simple positive / negative heuristic
-  const lower = body.toLowerCase();
-
-  if (
-    /yes|yeah|yep|sure|sounds good|interested|let's talk|call me|ok/i.test(lower)
-  ) {
-    return { type: "POSITIVE", raw };
+  // Negative / hard no
+  const negativeWords = ["no", "not interested", "no thanks", "leave me alone", "stop texting"];
+  if (negativeWords.some((w) => normalized === w || normalized.includes(w))) {
+    return { kind: "NEGATIVE", raw, normalized };
   }
 
-  if (/no thanks|not interested|stop bothering|leave me alone/i.test(lower)) {
-    return { type: "NEGATIVE", raw };
+  // "Not now" / later
+  const laterWords = ["later", "not now", "next year", "few months", "couple months", "maybe later"];
+  if (laterWords.some((w) => normalized.includes(w))) {
+    return { kind: "NOT_NOW", raw, normalized };
   }
 
-  return { type: "OTHER", raw };
+  // Question (very rough)
+  if (normalized.endsWith("?") || normalized.startsWith("what") || normalized.startsWith("how")) {
+    return { kind: "QUESTION", raw, normalized };
+  }
+
+  return { kind: "UNKNOWN", raw, normalized };
 }

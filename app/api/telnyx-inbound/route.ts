@@ -47,44 +47,28 @@ export async function POST(req: Request) {
 
     // Telnyx event shapes can vary a bit; we try a few common layouts
     const event = payload?.data || payload?.event || payload;
-    const msgPayload =
+    const eventData =
       event?.payload ||
       event?.record ||
       event?.data ||
       event?.message ||
       {};
 
-    const direction =
-      msgPayload?.direction ||
-      event?.direction ||
-      payload?.direction ||
-      "inbound";
-
-    const text =
-      msgPayload?.text ||
-      msgPayload?.body ||
-      msgPayload?.content ||
-      payload?.text;
-
-    const fromNumber =
-      msgPayload?.from?.phone_number ||
-      msgPayload?.from_number ||
-      msgPayload?.from ||
-      payload?.from;
-
-    const toNumber =
-      msgPayload?.to?.phone_number ||
-      msgPayload?.to_number ||
-      msgPayload?.to ||
-      payload?.to;
-
-    console.log("[telnyx-inbound] Raw payload:", JSON.stringify(payload));
-    console.log("[telnyx-inbound] Parsed:", {
-      direction,
-      text,
-      fromNumber,
-      toNumber,
-    });
+    // 1) Find the lead by phone
+    const fromNumber = normalizePhone(
+      eventData?.from?.phone_number ??
+        eventData?.from_number ??
+        eventData?.from ??
+        null
+    );
+    const toNumber = normalizePhone(
+      eventData?.to?.[0]?.phone_number ??
+        eventData?.to?.phone_number ??
+        eventData?.to_number ??
+        eventData?.to ??
+        null
+    );
+    const text: string = eventData?.text ?? eventData?.body ?? eventData?.content ?? "";
 
     if (!text || !fromNumber) {
       return NextResponse.json(
@@ -93,97 +77,50 @@ export async function POST(req: Request) {
       );
     }
 
-    const fromNorm = normalizePhone(fromNumber);
-    if (!fromNorm) {
-      return NextResponse.json(
-        { ok: false, error: "Invalid from phone" },
-        { status: 400 }
-      );
-    }
-
-    // Try to match a lead by phone. We match on the *last 10 digits*
-    // so that +1 / country code differences don’t break it.
-    const last10 = fromNorm.slice(-10);
-
     const { data: lead, error: leadError } = await supabase
       .from("leads")
-      .select("id, phone")
-      .ilike("phone", `%${last10}%`)
-      .order("created_at", { ascending: false })
-      .limit(1)
+      .select("*")
+      .eq("phone", fromNumber)
       .maybeSingle();
 
     if (leadError) {
-      console.error("[telnyx-inbound] Lead lookup error:", leadError);
+      console.error("[telnyx-inbound] error loading lead:", leadError);
     }
 
-    const leadId = lead?.id ?? null;
-
-    // Insert the inbound message
-    const { data: inserted, error: insertError } = await supabase
+    // 2) Insert the inbound message
+    const { data: insertedMessage, error: insertError } = await supabase
       .from("messages")
       .insert({
-        lead_id: leadId,
-        body: text,
+        lead_id: lead?.id ?? null,
         direction: "INBOUND",
         channel: "SMS",
+        body: text,
         is_auto: false,
+        from_number: fromNumber,
+        to_number: toNumber,
       })
       .select("*")
-      .maybeSingle();
+      .single();
 
     if (insertError) {
-      console.error("[telnyx-inbound] Insert error:", insertError);
-      return NextResponse.json(
-        { ok: false, error: "Failed to log message" },
-        { status: 500 }
-      );
-    }
-    
-    if (!inserted) {
-      console.error("[telnyx-inbound] Message insert returned no data");
+      console.error("[telnyx-inbound] failed to log inbound message:", insertError);
       return NextResponse.json(
         { ok: false, error: "Failed to log message" },
         { status: 500 }
       );
     }
 
-    const intent = analyzeInboundIntent(inserted.body);
+    // 3) Analyze intent + auto-route
+    const intent: InboundIntent = analyzeInboundIntent(text);
+
     await routeInboundMessage({
       supabase,
-      lead,
-      message: inserted,
+      lead: lead ?? null,
+      message: insertedMessage,
       intent,
     });
 
-
-    // If we found a lead, update its "last activity" fields
-    if (leadId) {
-      const now = new Date().toISOString();
-      const preview = text.slice(0, 140);
-
-      const { error: updateError } = await supabase
-        .from("leads")
-        .update({
-          last_activity_at: now,
-          last_message_at: now,
-          last_message_preview: preview,
-        })
-        .eq("id", leadId);
-
-      if (updateError) {
-        console.error("[telnyx-inbound] Lead update error:", updateError);
-      }
-    } else {
-      console.log(
-        "[telnyx-inbound] No matching lead found for inbound SMS from",
-        fromNumber
-      );
-    }
-
-    // You could also auto-pause automation here if you want:
-    // if (leadId) { ... set nurture_status / automationPaused ... }
-
+    // 4) Respond OK to Telnyx
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[telnyx-inbound] Unexpected error:", err);

@@ -1,99 +1,129 @@
 // app/lib/routeInboundMessage.ts
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { InboundIntent } from "./inboundIntent";
 
-type RouteInboundParams = {
-  supabase: any;        // we can tighten this later
-  message: any;         // the inserted message row
-  lead: any | null;     // lead row, or null if not matched
+type RouteInboundArgs = {
+  supabase: SupabaseClient<any, "public", any>;
+  lead: any | null;      // row from leads table (can tighten later)
+  message: any;          // row from messages table
   intent: InboundIntent;
 };
 
+/**
+ * Decide what to do with an inbound message:
+ * - STOP: mark nurture stopped, clear future nurtures
+ * - POSITIVE: pause nurture + create follow-up task for agent
+ * - NOT_NOW: push next_nurture_at into the future
+ * - NEGATIVE: close out nurture
+ * - QUESTION / UNKNOWN: leave nurture running for now
+ */
 export async function routeInboundMessage({
   supabase,
-  message,
   lead,
+  message,
   intent,
-}: RouteInboundParams): Promise<void> {
-  try {
-    if (!lead) {
-      console.warn(
-        "[routeInboundMessage] No lead found for inbound message",
-        message?.id
-      );
-      return;
-    }
-
-    const leadId = lead.id as string;
-
-    // 1) System note summarizing what we detected
-    let noteBody: string;
-
-    switch (intent.type) {
-      case "STOP":
-        noteBody =
-          "📵 Lead replied with an opt-out keyword (STOP/UNSUBSCRIBE). Automation should remain paused for this lead.";
-        break;
-      case "HELP":
-        noteBody =
-          "❓ Lead asked for help / more info. Consider replying manually to clarify who you are and why you're texting.";
-        break;
-      case "POSITIVE":
-        noteBody =
-          "🔥 Lead replied positively / with interest. This lead may be HOT and ready for follow-up.";
-        break;
-      case "NEGATIVE":
-        noteBody =
-          "🙅 Lead replied negatively / not interested. You may want to pause future outreach.";
-        break;
-      default:
-        noteBody =
-          "📩 New inbound reply received. Review the conversation and decide next steps.";
-        break;
-    }
-
-    await supabase.from("messages").insert({
-      lead_id: leadId,
-      direction: "SYSTEM",
-      channel: "SMS",
-      body: noteBody,
-      is_auto: true,
-    });
-
-    // 2) Optional lead updates. Wrap in try/catch in case these columns
-    //     don't exist yet in your schema.
-    if (intent.type === "STOP") {
-      try {
-        await supabase
-          .from("leads")
-          .update({
-            status: "opt_out",         // only if your schema has this
-            automation_paused: true,   // only if your schema has this
-          })
-          .eq("id", leadId);
-      } catch (err) {
-        console.warn(
-          "[routeInboundMessage] Could not update lead for STOP intent:",
-          err
-        );
-      }
-    }
-
-    if (intent.type === "POSITIVE") {
-      try {
-        await supabase
-          .from("leads")
-          .update({
-            status: "hot",             // matches your HOT pill if you use it
-          })
-          .eq("id", leadId);
-      } catch (err) {
-        console.warn(
-          "[routeInboundMessage] Could not update lead for POSITIVE intent:",
-          err
-        );
-      }
-    }
-    } catch (err) {
-      console.error("[routeInboundMessage] Error routing inbound message:", err);
-    }
+}: RouteInboundArgs): Promise<void> {
+  if (!lead) {
+    console.warn("[routeInboundMessage] No lead found for inbound message", message?.id);
+    return;
   }
+
+  const leadId = lead.id as string;
+  const nowIso = new Date().toISOString();
+
+  console.log("[routeInboundMessage] intent.kind =", intent.kind, "leadId =", leadId);
+
+  try {
+    switch (intent.kind) {
+      case "STOP": {
+        // Hard opt-out
+        const { error } = await supabase
+          .from("leads")
+          .update({
+            nurture_status: "STOPPED",
+            next_nurture_at: null,
+            nurture_locked_until: null,
+          })
+          .eq("id", leadId);
+
+        if (error) throw error;
+        break;
+      }
+
+      case "POSITIVE": {
+        // Lead is engaged — create a follow-up task and pause automation
+        const leadName = lead.name || lead.full_name || "this lead";
+
+        const { error: taskError } = await supabase.from("tasks").insert({
+          lead_id: leadId,
+          agent_id: lead.agent_id ?? null,
+          title: `Follow up with ${leadName} about moving`,
+          notes: `Auto-created from SMS reply: "${message.body}"`,
+          due_at: nowIso,
+          priority: "high",
+          is_completed: false,
+        });
+
+        if (taskError) throw taskError;
+
+        const { error: leadError } = await supabase
+          .from("leads")
+          .update({
+            nurture_status: "ENGAGED",
+            // pause future automated drips until agent handles it
+            next_nurture_at: null,
+            nurture_locked_until: null,
+          })
+          .eq("id", leadId);
+
+        if (leadError) throw leadError;
+
+        break;
+      }
+
+      case "NOT_NOW": {
+        // Push them into a long-term nurture bucket
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+        const next = new Date(Date.now() + THIRTY_DAYS_MS).toISOString();
+
+        const { error } = await supabase
+          .from("leads")
+          .update({
+            nurture_status: "ACTIVE",
+            nurture_stage: "LONG_TERM",
+            next_nurture_at: next,
+            nurture_locked_until: null,
+          })
+          .eq("id", leadId);
+
+        if (error) throw error;
+        break;
+      }
+
+      case "NEGATIVE": {
+        // Not interested, or already sold
+        const { error } = await supabase
+          .from("leads")
+          .update({
+            nurture_status: "CLOSED",
+            next_nurture_at: null,
+            nurture_locked_until: null,
+          })
+          .eq("id", leadId);
+
+        if (error) throw error;
+        break;
+      }
+
+      case "QUESTION":
+      case "UNKNOWN":
+      default: {
+        // For now, do nothing special – still logged in messages table.
+        // Later we can auto-create "Answer this question" tasks.
+        break;
+      }
+    }
+  } catch (err) {
+    console.error("[routeInboundMessage] error applying routing logic:", err);
+  }
+}
