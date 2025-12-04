@@ -5,115 +5,154 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// Telnyx env vars
 const telnyxApiKey = process.env.TELNYX_API_KEY!;
-const telnyxFromNumber = process.env.TELNYX_US_NUMBER!; // E.164, e.g. "+13479198781"
 const telnyxMessagingProfileId = process.env.TELNYX_MESSAGING_PROFILE_ID!;
+const telnyxFromNumber = process.env.TELNYX_US_NUMBER!; // e.g. "+13479198781"
+
+const TELNYX_MESSAGES_URL = "https://api.telnyx.com/v2/messages";
 
 const supabase = createClient(supabaseUrl, serviceKey, {
   auth: { persistSession: false },
 });
 
+// US/Canada normalization (we can later expand using `country`)
+function normalizeToE164(raw: string, country?: string): string {
+  if (!raw) return raw;
+  const trimmed = raw.trim();
+
+  if (trimmed.startsWith("+")) return trimmed;
+
+  const digits = trimmed.replace(/[^\d]/g, "");
+
+  // Default: assume US/CA if no country is given
+  if (!country || country === "US" || country === "CA") {
+    if (digits.length === 10) return "+1" + digits;
+    if (digits.length === 11 && digits.startsWith("1")) return "+" + digits;
+  }
+
+  // Fallback: just prefix +
+  return "+" + digits;
+}
+
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const { leadId, to, body: text } = body as {
+    const payload = await req.json().catch(() => ({}));
+
+    // 👇 match exactly what your frontend sends
+    const {
+      leadId,
+      to,
+      body, // this is the message text
+      country,
+    }: {
       leadId?: string;
       to?: string;
       body?: string;
-    };
+      country?: string;
+    } = payload;
 
-    if (!leadId || !to || !text) {
-      console.error("[reply-sms] Missing fields", body);
+    if (!leadId || !to || !body) {
       return NextResponse.json(
         { ok: false, error: "leadId, to, and body are required" },
         { status: 400 }
       );
     }
 
-    const trimmedText = text.trim();
-    if (!trimmedText) {
+    if (!telnyxApiKey || !telnyxMessagingProfileId || !telnyxFromNumber) {
+      console.error("[reply-sms] Missing Telnyx env vars", {
+        hasApiKey: !!telnyxApiKey,
+        hasProfile: !!telnyxMessagingProfileId,
+        hasFrom: !!telnyxFromNumber,
+      });
+
       return NextResponse.json(
-        { ok: false, error: "Empty message body" },
-        { status: 400 }
+        { ok: false, error: "Telnyx configuration missing" },
+        { status: 500 }
       );
     }
 
-    // Normalize phone to E.164 (US default if no +)
-    const toNumber =
-      to.startsWith("+") ? to : `+1${to.replace(/[^\d]/g, "")}`;
+    const toNumber = normalizeToE164(to, country);
 
-    // 1️⃣ Send SMS via Telnyx (same pattern as working curl)
-    const telnyxRes = await fetch("https://api.telnyx.com/v2/messages", {
+    // 1) Send SMS via Telnyx HTTP API
+    const telnyxRes = await fetch(TELNYX_MESSAGES_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${telnyxApiKey}`,
         "Content-Type": "application/json",
+        Authorization: `Bearer ${telnyxApiKey}`,
       },
       body: JSON.stringify({
-        from: telnyxFromNumber, // must be your Telnyx number in E.164
+        from: telnyxFromNumber,
         to: toNumber,
-        text: trimmedText,
+        text: body, // 👈 THIS is what Telnyx expects
         messaging_profile_id: telnyxMessagingProfileId,
       }),
     });
 
-    const telnyxBody = await telnyxRes.json().catch(() => null);
-    console.log(
-      "[reply-sms] Telnyx status:",
-      telnyxRes.status,
-      JSON.stringify(telnyxBody)
-    );
+    const telnyxBodyText = await telnyxRes.text();
+    let telnyxBody: any;
+    try {
+      telnyxBody = JSON.parse(telnyxBodyText);
+    } catch {
+      telnyxBody = telnyxBodyText;
+    }
+
+    console.log("[reply-sms] Telnyx status:", telnyxRes.status);
+    console.log("[reply-sms] Telnyx body:", telnyxBody);
 
     if (!telnyxRes.ok) {
+      // Surface *exactly* what Telnyx complained about
       return NextResponse.json(
         {
           ok: false,
-          error: "Telnyx send failed",
-          telnyx: telnyxBody,
+          error: "Telnyx API error",
+          status: telnyxRes.status,
+          telnyxBody,
         },
         { status: 502 }
       );
     }
 
-    // 2️⃣ Insert outbound message into Supabase
+    // 2) Log outbound message in Supabase so it shows in the conversation
     const { data: insertedMessage, error: insertError } = await supabase
       .from("messages")
       .insert({
         lead_id: leadId,
         direction: "OUTBOUND",
         channel: "SMS",
-        body: trimmedText,
+        body, // same text as sent
         is_auto: false,
+        from_number: telnyxFromNumber,
+        to_number: toNumber,
       })
       .select("*")
       .single();
 
     if (insertError) {
       console.error("[reply-sms] Supabase insert error:", insertError);
+      // still return ok since SMS was sent, but include warning
       return NextResponse.json(
-        { ok: false, error: "Failed to log message" },
-        { status: 500 }
+        {
+          ok: true,
+          warning: "SMS sent but failed to log in Supabase",
+          insertError,
+          telnyx: telnyxBody,
+        },
+        { status: 200 }
       );
     }
-
-    // 3️⃣ Update lead's last_contacted_at (non-critical if this fails)
-    await supabase
-      .from("leads")
-      .update({ last_contacted_at: new Date().toISOString() })
-      .eq("id", leadId);
 
     return NextResponse.json(
       {
         ok: true,
         message: insertedMessage,
+        telnyx: telnyxBody,
       },
       { status: 200 }
     );
   } catch (err: any) {
     console.error("[reply-sms] Unexpected error:", err);
     return NextResponse.json(
-      { ok: false, error: err?.message || "Failed to send SMS" },
+      { ok: false, error: err?.message || "Unexpected server error" },
       { status: 500 }
     );
   }
