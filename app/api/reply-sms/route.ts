@@ -2,21 +2,17 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Telnyx SDK (CommonJS)
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-// @ts-ignore
-const Telnyx = require("telnyx");
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+// Telnyx env vars
 const telnyxApiKey = process.env.TELNYX_API_KEY!;
-const telnyxFromNumber = process.env.TELNYX_US_NUMBER!; // using US for now
+const telnyxFromNumber = process.env.TELNYX_US_NUMBER!; // E.164, e.g. "+13479198781"
 const telnyxMessagingProfileId = process.env.TELNYX_MESSAGING_PROFILE_ID!;
 
 const supabase = createClient(supabaseUrl, serviceKey, {
   auth: { persistSession: false },
 });
-const telnyx = Telnyx(telnyxApiKey);
 
 export async function POST(req: Request) {
   try {
@@ -43,19 +39,42 @@ export async function POST(req: Request) {
       );
     }
 
-    // normalize phone to E.164
+    // Normalize phone to E.164 (US default if no +)
     const toNumber =
       to.startsWith("+") ? to : `+1${to.replace(/[^\d]/g, "")}`;
 
-    // 1️⃣ Send SMS via Telnyx
-    const telnyxRes = await telnyx.messages.create({
-      from: telnyxFromNumber,
-      to: toNumber,
-      text: trimmedText,
-      messaging_profile_id: telnyxMessagingProfileId,
+    // 1️⃣ Send SMS via Telnyx (same pattern as working curl)
+    const telnyxRes = await fetch("https://api.telnyx.com/v2/messages", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${telnyxApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: telnyxFromNumber, // must be your Telnyx number in E.164
+        to: toNumber,
+        text: trimmedText,
+        messaging_profile_id: telnyxMessagingProfileId,
+      }),
     });
 
-    console.log("[reply-sms] Telnyx message id:", telnyxRes?.data?.id);
+    const telnyxBody = await telnyxRes.json().catch(() => null);
+    console.log(
+      "[reply-sms] Telnyx status:",
+      telnyxRes.status,
+      JSON.stringify(telnyxBody)
+    );
+
+    if (!telnyxRes.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Telnyx send failed",
+          telnyx: telnyxBody,
+        },
+        { status: 502 }
+      );
+    }
 
     // 2️⃣ Insert outbound message into Supabase
     const { data: insertedMessage, error: insertError } = await supabase
