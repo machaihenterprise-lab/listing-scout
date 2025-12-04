@@ -144,7 +144,7 @@ async function runNurtureOnce() {
 
   for (const lead of leads as LeadRow[]) {
     try {
-      const to = normalizeToE164(lead.phone, lead.country);
+      const to = normalizeToE164(lead.phone ?? null, lead.country ?? null);
       if (!to) {
         console.warn("[run-nurture] Skipping lead with invalid phone", lead.id, lead.phone);
         continue;
