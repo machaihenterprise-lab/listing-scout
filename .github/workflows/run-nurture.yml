@@ -1,0 +1,18 @@
+name: Run Nurture Cycle (Every 5 Minutes)
+
+on:
+  schedule:
+    - cron: "*/5 * * * *" # every 5 minutes UTC
+  workflow_dispatch: {} # allow manual runs
+
+jobs:
+  call-nurture-endpoint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Call /api/run-nurture
+        run: |
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"secret\": \"${{ secrets.NURTURE_SECRET }}\"}" \
+            https://listing-scout.vercel.app/api/run-nurture
