@@ -16,7 +16,7 @@ type MessageRow = {
 };
 
 type RouteInboundArgs = {
-  supabase: SupabaseClient<unknown, "public", unknown>;
+  supabase: SupabaseClient;
   lead: LeadRow | null;
   message: MessageRow;
   intent: InboundIntent;
