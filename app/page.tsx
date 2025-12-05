@@ -332,6 +332,7 @@ export default function Home() {
 
   // Activity summary (While you were sleeping)
   const [activity, setActivity] = useState<null | { nurtureTexts: number; newLeads: number; errors: number }>(null);
+  const [, setActivityUpdatedAt] = useState<string | null>(null);
   const hasActivity = !!activity && ((activity.nurtureTexts || 0) > 0 || (activity.newLeads || 0) > 0 || (activity.errors || 0) > 0);
 
   // --- Tasks state ---
